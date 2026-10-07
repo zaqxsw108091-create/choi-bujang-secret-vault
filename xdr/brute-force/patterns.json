@@ -1,0 +1,21 @@
+{
+  "schema": "aleph.xdr.patterns.v1",
+  "moduleKey": "brute-force",
+  "source": "MITRE ATT&CK T1110 Brute Force",
+  "patterns": [
+    {
+      "name": "same-ip-failure-burst",
+      "mitre": "T1110",
+      "condition": "짧은 시간 안에 같은 주소에서 로그인 실패가 30건 이상 이어지고 성공이 없다",
+      "match": { "minFailures": 30, "minLevel": 10 },
+      "evidence": "T1110은 올바른 자격 증명을 모르는 공격자가 같은 대상에 실패를 반복해 맞추려는 기법이라고 설명합니다."
+    },
+    {
+      "name": "same-password-many-accounts",
+      "mitre": "T1110.003",
+      "condition": "같은 주소가 여러 계정(3개 이상)에 같은 비밀번호를 연속으로 넣는다",
+      "match": { "minAccounts": 3, "minLevel": 10 },
+      "evidence": "T1110.003 Password Spraying은 흔한 비밀번호 하나를 여러 계정에 번갈아 넣어 계정 잠금을 피하는 기법입니다."
+    }
+  ]
+}

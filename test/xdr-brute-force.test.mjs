@@ -1,0 +1,74 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { test } from 'node:test';
+import { createAuthApi } from '../src/auth-api.mjs';
+import { findBlock } from '../src/xdr-block.mjs';
+import { decide } from '../xdr/brute-force/decide.mjs';
+import { buildBlockRules } from '../xdr/brute-force/link.mjs';
+import { readAlerts } from '../xdr/brute-force/read-alerts.mjs';
+
+const fixture = JSON.parse(await readFile(new URL('../xdr/fixtures/brute-force.json', import.meta.url), 'utf8'));
+const decisions = [];
+for (const alert of fixture.alerts) decisions.push({ alertId: alert.id, ...(await decide(alert)) });
+const NOW = Date.parse('2026-10-08T00:00:00Z');
+const rules = buildBlockRules({ alerts: fixture.alerts, decisions, now: NOW });
+
+test('경보 건수와 뽑은 줄 수가 같다', async () => {
+  const { alertCount, rows } = await readAlerts();
+  assert.equal(rows.length, alertCount);
+});
+
+test('명확한 공격 block, 애매한 건 alert, 정상은 record', () => {
+  const action = (id) => decisions.find((d) => d.alertId === id).action;
+  for (let n = 1; n <= 10; n += 1) assert.equal(action(`bf-${String(n).padStart(2, '0')}`), 'block');
+  assert.equal(action('bf-12'), 'alert');
+  assert.equal(action('bf-20'), 'record');
+});
+
+test('정상 이벤트(bf-20~28)는 block 되지 않는다', () => {
+  const normal = decisions.filter((d) => Number(d.alertId.slice(3)) >= 20);
+  assert.ok(normal.every((d) => d.action === 'record'));
+});
+
+test('Jev 가 없으면 애매한 건 alert, 응답해도 성공 뒤 실패는 block 까지 가지 않는다', async () => {
+  const { createDecide } = await import('../xdr/brute-force/decide.mjs');
+  const ambiguous = fixture.alerts.find((a) => a.id === 'bf-12');
+  assert.equal((await createDecide({ askJev: () => null })(ambiguous)).action, 'alert');
+  assert.equal((await createDecide({ askJev: () => new Promise(() => {}) })(ambiguous)).action, 'alert');
+  assert.equal((await createDecide({ askJev: () => 0.99 })(ambiguous)).action, 'alert');
+});
+
+test('차단 규칙은 block 주소만, 만료 시각·근거 경보 번호가 있고 정상 주소는 없다', () => {
+  const normalIps = new Set(fixture.alerts.filter((a) => Number(a.id.slice(3)) >= 11).map((a) => a.data.srcip));
+  assert.ok(rules.length > 0);
+  for (const rule of rules) {
+    assert.equal(rule.decision, 'deny');
+    assert.match(rule.evidenceAlertId, /^bf-\d+$/u);
+    assert.ok(Date.parse(rule.expiresAt) > NOW);
+    assert.ok(!normalIps.has(rule.srcip));
+  }
+});
+
+const login = (rulesList, ip, calls) => createAuthApi({
+  getSettings: () => ({ url: 'https://example.invalid', secretKey: 'x' }),
+  fetchImpl: async () => { calls.n += 1; return { ok: false, status: 400, json: async () => ({ error_code: 'invalid_credentials' }) }; },
+  getBlockRules: () => rulesList,
+  now: () => NOW,
+}).login({ method: 'POST', headers: { 'x-forwarded-for': ip }, body: { email: 'a@b.co', password: 'pw' } }, {
+  setHeader() {},
+  status(code) { return { json: (body) => ({ code, body }) }; },
+});
+
+test('로그인: 차단된 주소는 403, 정상 주소는 기존대로 통과', async () => {
+  const calls = { n: 0 };
+  const blocked = await login(rules, rules[0].srcip, calls);
+  assert.equal(blocked.code, 403);
+  assert.equal(calls.n, 0);
+  const normal = await login(rules, '192.0.2.60', calls);
+  assert.equal(normal.code, 401);
+  assert.equal(calls.n, 1);
+});
+
+test('만료된 규칙은 막지 않는다', () => {
+  assert.equal(findBlock(rules, rules[0].srcip, NOW + 2 * 60 * 60 * 1000), null);
+});

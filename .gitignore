@@ -6,3 +6,7 @@ node_modules/
 public/aleph.json
 supabase/
 !.env.example
+
+# xdr-01: 실행 때마다 만들어지는 파일
+xdr/alerts.log
+xdr/brute-force/block-rules.json

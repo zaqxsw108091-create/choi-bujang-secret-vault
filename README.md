@@ -210,3 +210,11 @@
 [AGENTS.md](AGENTS.md)를 먼저 읽히고 한 번에 한 제작 단위만 요청하세요. 2단계부터는 자료 보호를 구현할 때 `public/data.json`을 복사하는 1단계 빌드 흐름도 함께 바꿔야 합니다. 3단계 이후의 로그인, 허용 경로, 5단계의 원본 API 주소, 6단계 이후 정책 규칙은 해당 단계 원고와 계약에 맞춰 추가합니다. 비밀번호·토큰·서버 전용 키·실제 학생 기록을 코드, Git, 제출 묶음에 넣지 않습니다.
 
 `src/decider.mjs`와 `src/detect.mjs`의 로컬 시험은 반 엔진이나 운영 심판의 결과가 아닙니다. 1단계 이후 제출 묶음 계약 `aleph.defense.submission.v2`는 `scripts/bundle.mjs`에 남아 있으며, 코딩 도구가 해당 단계의 최신 배포 주소와 Git 원격을 맞춘 뒤 사용합니다.
+
+## 보너스 xdr-01: 무차별 로그인 공격 잡기
+
+- 경보 읽기 `xdr/brute-force/read-alerts.mjs`, 패턴 `patterns.json`(MITRE T1110 근거), 판단 `decide.mjs`, 연결 `link.mjs`가 있습니다. 경보는 수업용 가상 Wazuh 묶음이고 실제 로그가 아닙니다.
+- 판단: 패턴 조건을 채운 명확한 공격은 `block`, 애매한 건 `alert`, 정상은 `record`입니다. Jev 연결은 저장소에 없어 `createDecide({ askJev })`로 꽂는 자리만 두었고, 없거나 늦으면 애매한 건 `alert`입니다.
+- 차단: `node xdr/brute-force/link.mjs`가 `block` 주소만 1시간 만료 거부 규칙(`block-rules.json`, 근거 경보 번호 포함)과 `xdr/alerts.log`로 만듭니다. 5단계 로그인 함수(`src/auth-api.mjs`)가 규칙에 걸린 주소를 403으로 거부하고, 규칙이 없으면 기존 동작 그대로입니다. `src/decider.mjs`는 바꾸지 않았습니다. 이 두 생성 파일은 Git에 올리지 않으며, 배포 서버에는 규칙 파일이 없어 아무도 막지 않습니다.
+- 다시 실행: `npm run xdr:run -- brute-force` 후 `node xdr/brute-force/link.mjs`, 시험은 `node --test test/xdr-brute-force.test.mjs`.
+- 로컬 결과(실행함): block 10 · alert 9 · record 9, 정상 이벤트를 막은 경우 0건. 운영 심판의 판정이 아닙니다.

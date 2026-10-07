@@ -27,8 +27,12 @@ function readSignals(alert) {
     accounts: Math.max(listed, named),
     hasFailure: /실패|같은 비밀번호/u.test(description),
     succeededAfter: /성공했/u.test(description),
+    mentionsAccounts: /계정/u.test(description),
   };
 }
+
+// 애매한 경보가 어느 패턴과 일부 닮았는지 이름만 모읍니다(reason 에 근거 패턴 이름을 적기 위함).
+const nearPatterns = (s) => [BURST.name, ...(s.mentionsAccounts ? [SPRAY.name] : [])];
 
 // 패턴 조건을 모두 채운 경보만 명확한 공격으로 봅니다.
 function matchPatterns(s) {
@@ -73,10 +77,10 @@ export function createDecide({ askJev } = {}) {
     // 애매한 경보: 실패 뒤 성공했으면 정상 사용자일 수 있어 Jev 가 높게 답해도 차단까지 올리지 않습니다.
     const answered = typeof askJev === 'function' ? await askWithTimeout(askJev, extractAlert(alert)) : null;
     if (answered === null) {
-      return { action: 'alert', confidence: ALERT_AT, reason: 'Jev 응답 없음: 패턴 일부만 보여 알림으로 남김' };
+      return { action: 'alert', confidence: ALERT_AT, reason: `Jev 응답 없음, 일부만 일치: ${nearPatterns(s).join(', ')}` };
     }
     const confidence = s.succeededAfter ? Math.min(answered, BLOCK_AT - 0.01) : answered;
-    return { action: toAction(confidence), confidence, reason: `Jev 확신도 ${answered}: 패턴 일부만 일치` };
+    return { action: toAction(confidence), confidence, reason: `Jev 확신도 ${answered}, 일부만 일치: ${nearPatterns(s).join(', ')}` };
   };
 }
 

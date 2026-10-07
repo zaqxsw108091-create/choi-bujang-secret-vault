@@ -66,55 +66,55 @@
       "alertId": "bf-11",
       "action": "alert",
       "confidence": 0.5,
-      "reason": "Jev 응답 없음: 패턴 일부만 보여 알림으로 남김"
+      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst, same-password-many-accounts"
     },
     {
       "alertId": "bf-12",
       "action": "alert",
       "confidence": 0.5,
-      "reason": "Jev 응답 없음: 패턴 일부만 보여 알림으로 남김"
+      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst"
     },
     {
       "alertId": "bf-13",
       "action": "alert",
       "confidence": 0.5,
-      "reason": "Jev 응답 없음: 패턴 일부만 보여 알림으로 남김"
+      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst"
     },
     {
       "alertId": "bf-14",
       "action": "alert",
       "confidence": 0.5,
-      "reason": "Jev 응답 없음: 패턴 일부만 보여 알림으로 남김"
+      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst, same-password-many-accounts"
     },
     {
       "alertId": "bf-15",
       "action": "alert",
       "confidence": 0.5,
-      "reason": "Jev 응답 없음: 패턴 일부만 보여 알림으로 남김"
+      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst, same-password-many-accounts"
     },
     {
       "alertId": "bf-16",
       "action": "alert",
       "confidence": 0.5,
-      "reason": "Jev 응답 없음: 패턴 일부만 보여 알림으로 남김"
+      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst"
     },
     {
       "alertId": "bf-17",
       "action": "alert",
       "confidence": 0.5,
-      "reason": "Jev 응답 없음: 패턴 일부만 보여 알림으로 남김"
+      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst"
     },
     {
       "alertId": "bf-18",
       "action": "alert",
       "confidence": 0.5,
-      "reason": "Jev 응답 없음: 패턴 일부만 보여 알림으로 남김"
+      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst"
     },
     {
       "alertId": "bf-19",
       "action": "alert",
       "confidence": 0.5,
-      "reason": "Jev 응답 없음: 패턴 일부만 보여 알림으로 남김"
+      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst"
     },
     {
       "alertId": "bf-20",

@@ -225,3 +225,31 @@ test('모아 보기: 기본 판단기는 지금까지 판단한 경보를 모으
   assert.equal(second.action, 'block');
   assert.match(second.reason, /합산 12건/u);
 });
+
+test('심판 배치 그대로: 실행기·경보 묶음·decide.mjs 하나만 빈 폴더에 두고 돌려도 28건이 오류 없이 나온다', async () => {
+  const { mkdtemp, mkdir, cp, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { spawn } = await import('node:child_process');
+  const { join } = await import('node:path');
+  const root = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/u, '$1');
+  const dir = await mkdtemp(join(tmpdir(), 'xdr-judge-'));
+  try {
+    await mkdir(join(dir, 'scripts'), { recursive: true });
+    await mkdir(join(dir, 'xdr', 'fixtures'), { recursive: true });
+    await mkdir(join(dir, 'xdr', 'brute-force'), { recursive: true });
+    await cp(join(root, 'scripts', 'xdr-run.mjs'), join(dir, 'scripts', 'xdr-run.mjs'));
+    await cp(join(root, 'xdr', 'fixtures', 'brute-force.json'), join(dir, 'xdr', 'fixtures', 'brute-force.json'));
+    await cp(join(root, 'xdr', 'brute-force', 'decide.mjs'), join(dir, 'xdr', 'brute-force', 'decide.mjs'));
+    const child = spawn(process.execPath, ['scripts/xdr-run.mjs', 'brute-force'], { cwd: dir, windowsHide: true });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    const code = await new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', resolve); });
+    assert.equal(code, 0);
+    assert.equal(stderr.trim(), '');
+    const result = JSON.parse(await readFile(join(dir, 'xdr', 'brute-force', 'result.json'), 'utf8'));
+    assert.deepEqual(result.counts, { block: 10, alert: 9, record: 9 });
+    assert.equal(result.decisions.length, fixture.alerts.length);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

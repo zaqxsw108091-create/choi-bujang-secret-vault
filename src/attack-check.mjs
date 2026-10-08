@@ -36,30 +36,41 @@ export async function runAttackChecks(config) {
 // 심판의 판정이 아니라 학생의 자기 점검입니다.
 async function staticChecks(get, marker) {
   const results = [];
-  const dataResponse = await get('/data.json');
-  const dataText = await dataResponse.text();
-  let dataNotes = null;
-  if (dataResponse.ok) {
+  // 접속하지 못하면(오류가 나면) 값을 지어내지 않고 "확인하지 못함"으로 적습니다.
+  const load = async (path) => {
     try {
-      const data = JSON.parse(dataText);
-      dataNotes = Array.isArray(data?.notes) ? data.notes.length : null;
+      const response = await get(path);
+      return { response, text: await response.text() };
+    } catch {
+      return null;
+    }
+  };
+  const dataExpected = '비로그인 /data.json에 가상 메모가 없음(파일이 없거나 notes가 비어 있음)';
+  const data = await load('/data.json');
+  let dataNotes = null;
+  if (data?.response.ok) {
+    try {
+      const parsed = JSON.parse(data.text);
+      dataNotes = Array.isArray(parsed?.notes) ? parsed.notes.length : null;
     } catch {
       // 형식이 맞지 않으면 아래에서 확인 불가로 적습니다.
     }
   }
-  results.push({ attackId: 'public_data_json_no_notes', expected: '비로그인 /data.json에 가상 메모가 없음(파일이 없거나 notes가 비어 있음)',
-    observed: dataResponse.status === 404 ? '비로그인 /data.json이 없음 (HTTP 404)'
-      : dataNotes === null ? `/data.json 형식을 확인하지 못함 (HTTP ${dataResponse.status})`
-        : dataNotes === 0 ? '비로그인 /data.json의 notes가 0건임 (HTTP 200)'
-          : `비로그인 /data.json에 메모 ${dataNotes}건이 보임` });
-  const alephResponse = await get('/aleph.json');
-  const alephText = await alephResponse.text();
-  const markerPaths = [['/data.json', dataText], ['/aleph.json', alephText]]
-    .filter(([, text]) => text.includes(marker)).map(([path]) => path);
+  results.push(data === null
+    ? { attackId: 'public_data_json_no_notes', expected: dataExpected, observed: '확인하지 못함 (요청을 보내지 못함)' }
+    : { attackId: 'public_data_json_no_notes', expected: dataExpected,
+      observed: data.response.status === 404 ? '비로그인 /data.json이 없음 (HTTP 404)'
+        : dataNotes === null ? `/data.json 형식을 확인하지 못함 (HTTP ${data.response.status})`
+          : dataNotes === 0 ? '비로그인 /data.json의 notes가 0건임 (HTTP 200)'
+            : `비로그인 /data.json에 메모 ${dataNotes}건이 보임` });
+  const aleph = await load('/aleph.json');
+  const markerPaths = [['/data.json', data], ['/aleph.json', aleph]]
+    .filter(([, loaded]) => loaded?.text.includes(marker)).map(([path]) => path);
   results.push({ attackId: 'static_marker_absent',
     expected: '비로그인 정적 응답(/data.json, /aleph.json)에 시작 틀 확인 표시가 없음',
     observed: markerPaths.length ? `확인 표시가 보임: ${markerPaths.join(', ')}`
-      : `확인 표시가 보이지 않음 (/data.json HTTP ${dataResponse.status}, /aleph.json HTTP ${alephResponse.status})` });
+      : data === null || aleph === null ? '확인하지 못함 (요청을 보내지 못함)'
+        : `확인 표시가 보이지 않음 (/data.json HTTP ${data.response.status}, /aleph.json HTTP ${aleph.response.status})` });
   return results;
 }
 
@@ -131,7 +142,17 @@ async function runStep3Checks(doFetch, app, marker) {
     ['other_issuer_token_refused', '다른 발급자의 로그인 토큰이 거부됨',
       () => send('GET', '/api/notes', { token: fakeJwt({ ...claims, iss: 'https://other.supabase.co/auth/v1' }) })],
   ];
-  for (const [attackId, expected, run] of cases) results.push(await refused(attackId, expected, await run()));
+  for (const [attackId, expected, run] of cases) {
+    let response;
+    try {
+      response = await run();
+    } catch {
+      // 접속하지 못하면 값을 지어내지 않고 "확인하지 못함"으로 적습니다.
+      results.push({ attackId, expected, observed: '확인하지 못함 (요청을 보내지 못함)' });
+      continue;
+    }
+    results.push(await refused(attackId, expected, response));
+  }
   return results;
 }
 

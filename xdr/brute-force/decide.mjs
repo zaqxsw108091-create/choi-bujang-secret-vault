@@ -20,6 +20,11 @@ const WINDOW_MS = 10 * 60 * 1000;
 
 const toAction = (confidence) => (confidence >= BLOCK_AT ? 'block' : confidence >= ALERT_AT ? 'alert' : 'record');
 
+// 어떤 값이 와도 오류 없이 문자로 바꿉니다(바꿀 수 없으면 빈 문자열).
+const text = (value) => {
+  try { return String(value ?? ''); } catch { return ''; }
+};
+
 // 비밀값처럼 보이는 문자열은 자리만 남깁니다(Jev 에게 보내는 요약에 씁니다).
 const SECRET_LIKE = [
   /\b(?:password|passwd|pwd|token|secret|api[_-]?key|비밀번호)\s*[=:]\s*\S+/giu,
@@ -28,7 +33,7 @@ const SECRET_LIKE = [
   /\b(?:sb_secret_|sk-)[A-Za-z0-9_-]{12,}/gu,
   /\b[A-Za-z0-9+/_-]{32,}={0,2}/gu,
 ];
-const scrub = (text) => SECRET_LIKE.reduce((out, pattern) => out.replace(pattern, '[가림]'), String(text ?? ''));
+const scrub = (value) => SECRET_LIKE.reduce((out, pattern) => out.replace(pattern, '[가림]'), text(value));
 
 const summarize = (alert) => ({
   id: typeof alert?.id === 'string' ? alert.id : '',
@@ -40,14 +45,14 @@ const summarize = (alert) => ({
 });
 
 function readSignals(alert) {
-  const description = String(alert?.rule?.description ?? '');
+  const description = text(alert?.rule?.description);
   const failures = Number(alert?.data?.count);
-  const accountList = String(alert?.data?.accounts ?? '').split(',').map((a) => a.trim()).filter(Boolean);
+  const accountList = text(alert?.data?.accounts).split(',').map((a) => a.trim()).filter(Boolean);
   const named = Number(/계정\s*(\d+)\s*개/u.exec(description)?.[1] ?? 0);
   const wordsMany = /여러 계정|서로 다른 계정|계정 이름을 바꿔/u.test(description) ? SPRAY.match.minAccounts : 0;
   return {
-    ip: String(alert?.data?.srcip ?? ''),
-    user: String(alert?.data?.srcuser ?? ''),
+    ip: text(alert?.data?.srcip),
+    user: text(alert?.data?.srcuser),
     at: Date.parse(alert?.timestamp),
     level: Number.isFinite(alert?.rule?.level) ? alert.rule.level : 0,
     failures: Number.isFinite(failures) ? failures : 0,

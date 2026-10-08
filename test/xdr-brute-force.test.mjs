@@ -72,3 +72,13 @@ test('로그인: 차단된 주소는 403, 정상 주소는 기존대로 통과',
 test('만료된 규칙은 막지 않는다', () => {
   assert.equal(findBlock(rules, rules[0].srcip, NOW + 2 * 60 * 60 * 1000), null);
 });
+
+test('같은 종류의 다른 경보도 수준·신호로 나뉜다', async () => {
+  const make = (level, description, data) => ({ id: 'x', timestamp: 't', rule: { level, description }, data: { srcip: '203.0.113.99', srcuser: 'user09', ...data } });
+  assert.equal((await decide(make(11, '같은 주소에서 로그인 실패 12건이 이어졌습니다.', { count: '12' }))).action, 'block');
+  assert.equal((await decide(make(11, '여러 계정에 같은 비밀번호 실패가 이어졌습니다.', {}))).action, 'block');
+  assert.equal((await decide(make(11, '로그인 실패 12건 뒤에 성공했습니다.', { count: '12' }))).action, 'alert');
+  assert.equal((await decide(make(8, '로그인 실패 9건이 있습니다.', { count: '9' }))).action, 'alert');
+  assert.equal((await decide(make(3, '로그인이 성공했습니다.', {}))).action, 'record');
+  assert.equal((await decide({})).action, 'record');
+});

@@ -17,8 +17,8 @@
     {
       "alertId": "bf-03",
       "action": "block",
-      "confidence": 0.95,
-      "reason": "패턴 일치: same-ip-failure-burst"
+      "confidence": 0.98,
+      "reason": "패턴 일치: same-ip-failure-burst, same-password-many-accounts"
     },
     {
       "alertId": "bf-04",
@@ -29,8 +29,8 @@
     {
       "alertId": "bf-05",
       "action": "block",
-      "confidence": 0.95,
-      "reason": "패턴 일치: same-password-many-accounts"
+      "confidence": 0.98,
+      "reason": "패턴 일치: same-ip-failure-burst, same-password-many-accounts"
     },
     {
       "alertId": "bf-06",
@@ -53,8 +53,8 @@
     {
       "alertId": "bf-09",
       "action": "block",
-      "confidence": 0.95,
-      "reason": "패턴 일치: same-password-many-accounts"
+      "confidence": 0.98,
+      "reason": "패턴 일치: same-ip-failure-burst, same-password-many-accounts"
     },
     {
       "alertId": "bf-10",

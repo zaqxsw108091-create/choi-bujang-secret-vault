@@ -21,10 +21,11 @@ function readSignals(alert) {
   const failures = Number(alert?.data?.count);
   const listed = String(alert?.data?.accounts ?? '').split(',').filter(Boolean).length;
   const named = Number(/계정\s*(\d+)\s*개/u.exec(description)?.[1] ?? 0);
+  const wordsMany = /여러 계정|서로 다른 계정|계정 이름을 바꿔/u.test(description) ? SPRAY.match.minAccounts : 0;
   return {
     level: Number.isFinite(alert?.rule?.level) ? alert.rule.level : 0,
     failures: Number.isFinite(failures) ? failures : 0,
-    accounts: Math.max(listed, named),
+    accounts: Math.max(listed, named, wordsMany),
     hasFailure: /실패|같은 비밀번호/u.test(description),
     succeededAfter: /성공했/u.test(description),
     mentionsAccounts: /계정/u.test(description),

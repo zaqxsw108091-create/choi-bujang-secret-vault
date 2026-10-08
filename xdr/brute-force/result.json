@@ -5,8 +5,8 @@
     {
       "alertId": "bf-01",
       "action": "block",
-      "confidence": 0.98,
-      "reason": "패턴 일치: same-ip-failure-burst, same-password-many-accounts"
+      "confidence": 0.95,
+      "reason": "패턴 일치: same-ip-failure-burst"
     },
     {
       "alertId": "bf-02",

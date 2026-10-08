@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import vm from 'node:vm';
 import { createAuthApi } from '../src/auth-api.mjs';
 import { createNotesApi } from '../src/notes-api.mjs';
 import { findBlock } from '../src/xdr-block.mjs';
-import { createDecide, decide } from '../xdr/brute-force/decide.mjs';
+import { PATTERNS, createDecide, decide } from '../xdr/brute-force/decide.mjs';
 import { buildBlockRules } from '../xdr/brute-force/link.mjs';
 import { extractAlert, readAlerts, scrub } from '../xdr/brute-force/read-alerts.mjs';
 
@@ -181,4 +182,74 @@ test('경보 읽기: 읽는 동안 경보 원본 파일을 고치지 않는다',
   const before = await readFile(path, 'utf8');
   await readAlerts();
   assert.equal(await readFile(path, 'utf8'), before);
+});
+
+const decideSource = await readFile(new URL('../xdr/brute-force/decide.mjs', import.meta.url), 'utf8');
+
+test('심판 격리 환경: decide.mjs 는 어떤 모듈도 import·require 하지 않는다(주석 제외한 코드 기준)', () => {
+  const code = decideSource.replace(/\/\/.*$/gmu, '');
+  assert.doesNotMatch(code, /^\s*import\s/mu);
+  assert.doesNotMatch(code, /^\s*export\s[^\n]*\sfrom\s/mu);
+  assert.doesNotMatch(code, /\bimport\s*\(|\brequire\s*\(|node:|process\./u);
+});
+
+test('심판 격리 환경: 내장 모듈·require·setTimeout 이 없는 빈 환경에서도 같은 결과가 나온다', async () => {
+  const source = decideSource.replace(/^export /gmu, '');
+  const box = vm.runInNewContext(`${source}\n;({ decide, createDecide })`, {});
+  const out = [];
+  for (const alert of fixture.alerts) out.push(await box.decide(alert));
+  const real = createDecide();
+  const expected = [];
+  for (const alert of fixture.alerts) expected.push(await real(alert));
+  assert.deepEqual(out.map((d) => [d.action, d.confidence, d.reason]), expected.map((d) => [d.action, d.confidence, d.reason]));
+  const counts = { block: 0, alert: 0, record: 0 };
+  for (const d of out) counts[d.action] += 1;
+  assert.deepEqual(counts, { block: 10, alert: 9, record: 9 });
+  // Jev 가 없어도(그리고 setTimeout 이 없어도) 오류 없이 alert 로 떨어진다.
+  const withJev = vm.runInNewContext(`${source}\n;createDecide({ askJev: () => 0.9 })`, {});
+  assert.equal((await withJev(fixture.alerts.find((a) => a.id === 'bf-12'))).action, 'alert');
+});
+
+test('patterns.json 과 decide.mjs 안의 패턴 값이 같다', async () => {
+  const file = JSON.parse(await readFile(new URL('../xdr/brute-force/patterns.json', import.meta.url), 'utf8'));
+  assert.deepEqual(file.patterns.map((p) => [p.name, p.mitre, p.match]), PATTERNS.map((p) => [p.name, p.mitre, p.match]));
+});
+
+test('모아 보기: 기본 판단기는 지금까지 판단한 경보를 모으고, 같은 경보를 두 번 세지 않는다', async () => {
+  const mk = (id, at, count) => ({ id, timestamp: at, rule: { level: 11, description: `로그인 실패 ${count}건이 있습니다.` }, data: { srcip: '203.0.113.88', srcuser: 'user09', count: String(count) } });
+  const d = createDecide();
+  const first = mk('p', '2026-09-27T10:00:00+09:00', 6);
+  assert.equal((await d(first)).action, 'alert');
+  assert.equal((await d(first)).action, 'alert');
+  const second = await d(mk('q', '2026-09-27T10:02:00+09:00', 6));
+  assert.equal(second.action, 'block');
+  assert.match(second.reason, /합산 12건/u);
+});
+
+test('심판 배치 그대로: 실행기·경보 묶음·decide.mjs 하나만 빈 폴더에 두고 돌려도 28건이 오류 없이 나온다', async () => {
+  const { mkdtemp, mkdir, cp, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { spawn } = await import('node:child_process');
+  const { join } = await import('node:path');
+  const root = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/u, '$1');
+  const dir = await mkdtemp(join(tmpdir(), 'xdr-judge-'));
+  try {
+    await mkdir(join(dir, 'scripts'), { recursive: true });
+    await mkdir(join(dir, 'xdr', 'fixtures'), { recursive: true });
+    await mkdir(join(dir, 'xdr', 'brute-force'), { recursive: true });
+    await cp(join(root, 'scripts', 'xdr-run.mjs'), join(dir, 'scripts', 'xdr-run.mjs'));
+    await cp(join(root, 'xdr', 'fixtures', 'brute-force.json'), join(dir, 'xdr', 'fixtures', 'brute-force.json'));
+    await cp(join(root, 'xdr', 'brute-force', 'decide.mjs'), join(dir, 'xdr', 'brute-force', 'decide.mjs'));
+    const child = spawn(process.execPath, ['scripts/xdr-run.mjs', 'brute-force'], { cwd: dir, windowsHide: true });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    const code = await new Promise((resolve, reject) => { child.on('error', reject); child.on('exit', resolve); });
+    assert.equal(code, 0);
+    assert.equal(stderr.trim(), '');
+    const result = JSON.parse(await readFile(join(dir, 'xdr', 'brute-force', 'result.json'), 'utf8'));
+    assert.deepEqual(result.counts, { block: 10, alert: 9, record: 9 });
+    assert.equal(result.decisions.length, fixture.alerts.length);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

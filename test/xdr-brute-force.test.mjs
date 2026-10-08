@@ -82,3 +82,24 @@ test('같은 종류의 다른 경보도 수준·신호로 나뉜다', async () =
   assert.equal((await decide(make(3, '로그인이 성공했습니다.', {}))).action, 'record');
   assert.equal((await decide({})).action, 'record');
 });
+
+import { createNotesApi } from '../src/notes-api.mjs';
+
+test('자료 API: 차단된 주소는 로그인 확인 전에 403, 다른 주소는 기존대로 로그인을 요구한다', async () => {
+  const api = createNotesApi({
+    getVerifier: () => async () => null,
+    getSupabase: () => ({}),
+    getBlockRules: () => rules,
+    now: () => NOW,
+  });
+  const call = async (ip) => {
+    let out;
+    await api.collection({ method: 'GET', headers: { 'x-forwarded-for': ip } }, {
+      setHeader() {},
+      status(code) { return { json: (body) => { out = { code, body }; } }; },
+    });
+    return out;
+  };
+  assert.equal((await call(rules[0].srcip)).code, 403);
+  assert.equal((await call('192.0.2.60')).code, 401);
+});

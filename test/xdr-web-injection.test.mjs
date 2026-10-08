@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import vm from 'node:vm';
+import { createAuthApi } from '../src/auth-api.mjs';
+import { createNotesApi } from '../src/notes-api.mjs';
+import { WEB_INJECTION_RULES_FILE, findBlock, loadBlockRules } from '../src/xdr-block.mjs';
 import { PATTERNS, createDecide, decide } from '../xdr/web-injection/decide.mjs';
+import { alertLine, buildBlockRules, linkResults } from '../xdr/web-injection/link.mjs';
 import { extractAlert, readAlerts, scrub } from '../xdr/web-injection/read-alerts.mjs';
 
 const fixture = JSON.parse(await readFile(new URL('../xdr/fixtures/web-injection.json', import.meta.url), 'utf8'));
@@ -210,4 +216,164 @@ test('경보 읽기: 비밀값처럼 보이는 값은 가리고, 원본 경보 �
   assert.equal(scrub('평범한 문장'), '평범한 문장');
   await readAlerts();
   assert.equal(await readFile(new URL('../xdr/fixtures/web-injection.json', import.meta.url), 'utf8'), before);
+});
+
+// ---- 제작 4: 알림과 차단 ----
+const decisions = [];
+for (const alert of fixture.alerts) decisions.push({ alertId: alert.id, ...(await decide(alert)) });
+const NOW = Date.parse('2026-10-08T00:00:00Z');
+const rules = buildBlockRules({ alerts: fixture.alerts, decisions, now: NOW });
+const ipsOf = (ids) => new Set(ids.map((id) => byId(id).data.srcip));
+
+test('차단 규칙은 명확한 공격 주소만, 만료 시각·근거 경보 번호가 있고 정상·애매한 주소는 없다', () => {
+  const attackIps = ipsOf(CLEAR);
+  assert.equal(rules.length, attackIps.size); // wi-01·02 는 같은 주소라 7개
+  assert.deepEqual(new Set(rules.map((r) => r.srcip)), attackIps);
+  for (const rule of rules) {
+    assert.equal(rule.decision, 'deny');
+    assert.equal(rule.ruleId, 'xdr.wi.deny-ip');
+    assert.ok(CLEAR.includes(rule.evidenceAlertId), rule.evidenceAlertId);
+    assert.equal(byId(rule.evidenceAlertId).data.srcip, rule.srcip);
+    assert.ok(Date.parse(rule.expiresAt) > NOW);
+    assert.equal(Date.parse(rule.createdAt), NOW);
+  }
+  for (const ip of [...ipsOf(NORMAL), ...ipsOf(AMBIGUOUS)]) assert.ok(!rules.some((r) => r.srcip === ip), ip);
+});
+
+test('차단 규칙: 정상 이벤트에도 나온 주소, 확신도가 낮은 block, 주소 모양이 아닌 값, 모르는 경보 번호는 넣지 않는다', () => {
+  const mk = (id, srcip) => ({ id, data: { srcip } });
+  const alerts = [mk('a', '203.0.113.1'), mk('b', '203.0.113.1'), mk('c', '203.0.113.2'), mk('d', 'not-an-ip'), mk('e', '203.0.113.3'), mk('f', '203.0.113.4')];
+  const ds = [
+    { alertId: 'a', action: 'block', confidence: 0.95 }, { alertId: 'b', action: 'record', confidence: 0.05 },
+    { alertId: 'c', action: 'block', confidence: 0.84 }, { alertId: 'd', action: 'block', confidence: 0.95 },
+    { alertId: 'zzz', action: 'block', confidence: 0.95 }, { alertId: 'e', action: 'alert', confidence: 0.9 },
+    { alertId: 'f', action: 'block', confidence: 0.85 }, { alertId: 'f', action: 'block', confidence: 0.99 },
+    null, { alertId: 5, action: 'block', confidence: 1 }, { action: 'block', confidence: 1 },
+  ];
+  const out = buildBlockRules({ alerts, decisions: ds, now: NOW });
+  assert.deepEqual(out.map((r) => [r.srcip, r.evidenceAlertId]), [['203.0.113.4', 'f']]);
+});
+
+test('만료된 규칙은 막지 않는다', () => {
+  assert.ok(findBlock(rules, rules[0].srcip, NOW + 30 * 60 * 1000));
+  assert.equal(findBlock(rules, rules[0].srcip, NOW + 2 * 60 * 60 * 1000), null);
+});
+
+test('알림 한 줄: 한 줄이고 비밀값은 가리며, 줄바꿈이 섞여도 한 줄을 지킨다', () => {
+  const alert = byId('wi-01');
+  const line = alertLine({ alertId: 'wi-01', action: 'block', confidence: 0.95, reason: '패턴 일치: x\npassword=hunter2\r\n다음 줄' }, alert, NOW);
+  assert.ok(!/[\r\n]/u.test(line));
+  assert.doesNotMatch(line, /hunter2/u);
+  assert.match(line, /^2026-10-08T00:00:00\.000Z BLOCK wi-01 203\.0\.113\.10 - 0\.95 /u);
+});
+
+// 판정 결과를 담은 임시 폴더 하나를 만들고 연결을 돌립니다(저장소의 실제 규칙·로그 파일은 건드리지 않습니다).
+async function linked(run) {
+  const dir = await mkdtemp(join(tmpdir(), 'xdr-link-'));
+  try {
+    await mkdir(join(dir, 'xdr', 'fixtures'), { recursive: true });
+    await mkdir(join(dir, 'xdr', 'web-injection'), { recursive: true });
+    await writeFile(join(dir, 'xdr', 'fixtures', 'web-injection.json'), JSON.stringify(fixture));
+    await writeFile(join(dir, 'xdr', 'web-injection', 'result.json'), JSON.stringify({ schema: 'aleph.xdr.result.v1', moduleKey: 'web-injection', decisions, counts: {} }));
+    return await run({ dir, rulesFile: join(dir, 'rules.json'), logFile: join(dir, 'alerts.log') });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+test('연결: 규칙 파일에는 block 주소만, 알림 로그에는 block·alert 만 한 줄씩 쌓이고 다시 흘리면 로그가 이어진다', async () => {
+  await linked(async ({ dir, rulesFile, logFile }) => {
+    const first = await linkResults({ root: dir, now: NOW, rulesFile, logFile });
+    assert.equal(first.rules.length, 7);
+    assert.equal(first.logged, 17); // block 8 + alert 9, record 9 는 남기지 않음
+    const file = JSON.parse(await readFile(rulesFile, 'utf8'));
+    assert.equal(file.schema, 'aleph.xdr.block-rules.v1');
+    assert.deepEqual(file.rules, first.rules);
+    const log = (await readFile(logFile, 'utf8')).trimEnd().split('\n');
+    assert.equal(log.length, 17);
+    assert.equal(log.filter((l) => / BLOCK /u.test(l)).length, 8);
+    assert.equal(log.filter((l) => / ALERT /u.test(l)).length, 9);
+    assert.ok(!log.some((l) => / RECORD /u.test(l)));
+    assert.ok(log.every((l) => /^\d{4}-\d\d-\d\dT[\d:.]+Z (?:BLOCK|ALERT) wi-\d\d \S+ \S+ [\d.]+ \S/u.test(l)));
+    await linkResults({ root: dir, now: NOW + 1000, rulesFile, logFile });
+    assert.equal((await readFile(logFile, 'utf8')).trimEnd().split('\n').length, 34); // 알림은 쌓이고
+    assert.equal(JSON.parse(await readFile(rulesFile, 'utf8')).rules.length, 7); // 규칙은 같은 주소를 두 번 넣지 않는다
+  });
+});
+
+test('연결: 판정 결과가 없거나 형식이 틀리면 안내 문구로 멈추고 규칙·로그를 만들지 않는다', async () => {
+  await linked(async ({ dir, rulesFile, logFile }) => {
+    await rm(join(dir, 'xdr', 'web-injection', 'result.json'));
+    await assert.rejects(linkResults({ root: dir, rulesFile, logFile }), /npm run xdr:run -- web-injection/u);
+    await writeFile(join(dir, 'xdr', 'web-injection', 'result.json'), JSON.stringify({ schema: 'x', decisions: [] }));
+    await assert.rejects(linkResults({ root: dir, rulesFile, logFile }), /형식이 아닙니다/u);
+    await assert.rejects(readFile(rulesFile));
+    await assert.rejects(readFile(logFile));
+  });
+});
+
+const callAuth = (rulesList, ip, calls) => createAuthApi({
+  getSettings: () => ({ url: 'https://example.invalid', secretKey: 'x' }),
+  fetchImpl: async () => { calls.n += 1; return { ok: false, status: 400, json: async () => ({ error_code: 'invalid_credentials' }) }; },
+  getBlockRules: () => rulesList,
+  now: () => NOW,
+}).login({ method: 'POST', headers: { 'x-forwarded-for': ip }, body: { email: 'a@b.co', password: 'pw' } }, {
+  setHeader() {},
+  status(code) { return { json: (body) => ({ code, body }) }; },
+});
+
+const callNotes = async (rulesList, ip) => {
+  const api = createNotesApi({ getVerifier: () => async () => null, getSupabase: () => ({}), getBlockRules: () => rulesList, now: () => NOW });
+  let out;
+  await api.collection({ method: 'GET', headers: { 'x-forwarded-for': ip } }, {
+    setHeader() {},
+    status(code) { return { json: (body) => { out = { code, body }; } }; },
+  });
+  return out;
+};
+
+test('경보를 다시 흘리면: 명확한 공격 주소는 로그인·자료 API 에서 403, 정상·애매한 주소는 기존대로 통과', async () => {
+  await linked(async ({ dir, rulesFile, logFile }) => {
+    await linkResults({ root: dir, now: Date.now(), rulesFile, logFile });
+    const live = loadBlockRules(rulesFile);
+    assert.equal(live.length, 7);
+    const calls = { n: 0 };
+    for (const ip of ipsOf(CLEAR)) {
+      assert.equal((await callAuth(live, ip, calls)).code, 403, `로그인 ${ip}`);
+      assert.deepEqual((await callAuth(live, ip, calls)).body, { error: 'BLOCKED_BY_XDR' });
+      assert.equal((await callNotes(live, ip)).code, 403, `자료 ${ip}`);
+    }
+    assert.equal(calls.n, 0); // 막힌 주소의 요청은 Supabase 로 보내지 않는다
+    for (const ip of [...ipsOf(NORMAL), ...ipsOf(AMBIGUOUS)]) {
+      assert.equal((await callAuth(live, ip, calls)).code, 401, `로그인 ${ip}`); // 막히지 않고 기존 로그인 검사까지 간다
+      assert.equal((await callNotes(live, ip)).code, 401, `자료 ${ip}`); // 막히지 않고 기존 로그인 요구까지 간다
+    }
+    assert.equal(calls.n, ipsOf(NORMAL).size + ipsOf(AMBIGUOUS).size);
+  });
+});
+
+test('ZTNA 거부 규칙 읽기: 규칙 파일이 없거나 깨져 있으면 아무도 막지 않고, 웹 주입 규칙 파일도 함께 읽는다', async () => {
+  assert.deepEqual(loadBlockRules(join(tmpdir(), 'xdr-no-such-rules.json')), []);
+  const dir = await mkdtemp(join(tmpdir(), 'xdr-rules-'));
+  try {
+    await writeFile(join(dir, 'broken.json'), '{ not json');
+    assert.deepEqual(loadBlockRules(join(dir, 'broken.json')), []);
+    await writeFile(join(dir, 'odd.json'), JSON.stringify({ rules: 'x' }));
+    assert.deepEqual(loadBlockRules(join(dir, 'odd.json')), []);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+  // 기본 경로: 웹 주입 규칙 파일(생성 파일, Git 제외)을 임시로 두고 읽히는지 본 뒤 원래대로 되돌립니다.
+  let original = null;
+  try { original = await readFile(WEB_INJECTION_RULES_FILE, 'utf8'); } catch { /* 없음 */ }
+  const probe = { ruleId: 'xdr.wi.deny-ip', decision: 'deny', srcip: '198.51.100.250', evidenceAlertId: 'wi-01', createdAt: new Date(NOW).toISOString(), expiresAt: new Date(NOW + 3600000).toISOString() };
+  try {
+    await writeFile(WEB_INJECTION_RULES_FILE, JSON.stringify({ schema: 'aleph.xdr.block-rules.v1', rules: [probe] }));
+    const found = loadBlockRules();
+    assert.ok(found.some((r) => r.srcip === '198.51.100.250'));
+    assert.equal(findBlock(found, '198.51.100.250', NOW)?.evidenceAlertId, 'wi-01');
+  } finally {
+    if (original === null) await rm(WEB_INJECTION_RULES_FILE, { force: true });
+    else await writeFile(WEB_INJECTION_RULES_FILE, original);
+  }
 });

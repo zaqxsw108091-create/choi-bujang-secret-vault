@@ -5,20 +5,20 @@
     {
       "alertId": "bf-01",
       "action": "block",
-      "confidence": 0.95,
-      "reason": "패턴 일치: same-ip-failure-burst"
+      "confidence": 0.98,
+      "reason": "패턴 일치: same-ip-failure-burst, same-password-many-accounts"
     },
     {
       "alertId": "bf-02",
       "action": "block",
-      "confidence": 0.95,
-      "reason": "패턴 일치: same-password-many-accounts"
+      "confidence": 0.98,
+      "reason": "패턴 일치: same-ip-failure-burst, same-password-many-accounts · 같은 주소·계정 합산 48건"
     },
     {
       "alertId": "bf-03",
       "action": "block",
-      "confidence": 0.95,
-      "reason": "패턴 일치: same-ip-failure-burst"
+      "confidence": 0.98,
+      "reason": "패턴 일치: same-ip-failure-burst, same-password-many-accounts"
     },
     {
       "alertId": "bf-04",
@@ -29,8 +29,8 @@
     {
       "alertId": "bf-05",
       "action": "block",
-      "confidence": 0.95,
-      "reason": "패턴 일치: same-password-many-accounts"
+      "confidence": 0.98,
+      "reason": "패턴 일치: same-ip-failure-burst, same-password-many-accounts"
     },
     {
       "alertId": "bf-06",
@@ -53,8 +53,8 @@
     {
       "alertId": "bf-09",
       "action": "block",
-      "confidence": 0.95,
-      "reason": "패턴 일치: same-password-many-accounts"
+      "confidence": 0.98,
+      "reason": "패턴 일치: same-ip-failure-burst, same-password-many-accounts"
     },
     {
       "alertId": "bf-10",
@@ -66,7 +66,7 @@
       "alertId": "bf-11",
       "action": "alert",
       "confidence": 0.5,
-      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst, same-password-many-accounts"
+      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst"
     },
     {
       "alertId": "bf-12",
@@ -84,7 +84,7 @@
       "alertId": "bf-14",
       "action": "alert",
       "confidence": 0.5,
-      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst, same-password-many-accounts"
+      "reason": "Jev 응답 없음, 일부만 일치: same-ip-failure-burst"
     },
     {
       "alertId": "bf-15",

@@ -45,7 +45,7 @@ function readSignals(alert) {
     accounts: Math.max(accountList.length, named, wordsMany),
     hasFailure: /실패|같은 비밀번호/u.test(description),
     succeededAfter: /성공했/u.test(description),
-    mentionsAccounts: /계정/u.test(description),
+    multiAccounts: /두 계정|세 계정|여러 계정|서로 다른 계정|계정 이름을 바꿔|계정\s*\d+\s*개/u.test(description) || accountList.length > 1,
   };
 }
 
@@ -74,7 +74,7 @@ function matchPatterns(s, g) {
 }
 
 // 애매한 경보가 어느 패턴과 일부 닮았는지 이름만 모읍니다(reason 에 근거 패턴 이름을 적기 위함).
-const nearPatterns = (s) => [BURST.name, ...(s.mentionsAccounts ? [SPRAY.name] : [])];
+const nearPatterns = (s) => [BURST.name, ...(s.multiAccounts ? [SPRAY.name] : [])];
 
 async function askWithTimeout(askJev, summary) {
   let timer;

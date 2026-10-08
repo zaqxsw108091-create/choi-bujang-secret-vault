@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { createAuthApi } from '../src/auth-api.mjs';
+import { createNotesApi } from '../src/notes-api.mjs';
 import { findBlock } from '../src/xdr-block.mjs';
-import { decide } from '../xdr/brute-force/decide.mjs';
+import { createDecide, decide } from '../xdr/brute-force/decide.mjs';
 import { buildBlockRules } from '../xdr/brute-force/link.mjs';
 import { readAlerts } from '../xdr/brute-force/read-alerts.mjs';
 
@@ -31,7 +32,6 @@ test('정상 이벤트(bf-20~28)는 block 되지 않는다', () => {
 });
 
 test('Jev 가 없으면 애매한 건 alert, 응답해도 성공 뒤 실패는 block 까지 가지 않는다', async () => {
-  const { createDecide } = await import('../xdr/brute-force/decide.mjs');
   const ambiguous = fixture.alerts.find((a) => a.id === 'bf-12');
   assert.equal((await createDecide({ askJev: () => null })(ambiguous)).action, 'alert');
   assert.equal((await createDecide({ askJev: () => new Promise(() => {}) })(ambiguous)).action, 'alert');
@@ -83,7 +83,6 @@ test('같은 종류의 다른 경보도 수준·신호로 나뉜다', async () =
   assert.equal((await decide({})).action, 'record');
 });
 
-import { createNotesApi } from '../src/notes-api.mjs';
 
 test('자료 API: 차단된 주소는 로그인 확인 전에 403, 다른 주소는 기존대로 로그인을 요구한다', async () => {
   const api = createNotesApi({
@@ -104,7 +103,6 @@ test('자료 API: 차단된 주소는 로그인 확인 전에 403, 다른 주소
   assert.equal((await call('192.0.2.60')).code, 401);
 });
 
-import { createDecide } from '../xdr/brute-force/decide.mjs';
 
 const burst = (id, at, level, count, extra = {}) => ({
   id, timestamp: at, rule: { level, description: `로그인 실패 ${count}건이 있습니다.` },
@@ -143,4 +141,19 @@ test('모아 보기: 다른 주소의 실패나 성공 뒤 실패는 합치지 �
   const other = burst('o', '2026-09-27T10:01:00+09:00', 11, 6, { srcip: '198.51.100.77' });
   const ok = { ...burst('s', '2026-09-27T10:01:00+09:00', 11, 6), rule: { level: 11, description: '로그인 실패 6건 뒤에 성공했습니다.' } };
   assert.equal((await createDecide({ history: [a, other, ok] })(a)).action, 'alert');
+});
+
+test('차단 규칙: 주소 모양이 아닌 값은 규칙으로 만들지 않는다', () => {
+  const alerts = ['cafe', '999.999.999.999', '', '203.0.113.5', '2001:db8::1'].map((ip, i) => ({ id: `z${i}`, data: { srcip: ip } }));
+  const decisions = alerts.map((a) => ({ alertId: a.id, action: 'block' }));
+  const out = buildBlockRules({ alerts, decisions, now: NOW }).map((r) => r.srcip);
+  assert.deepEqual(out, ['203.0.113.5', '2001:db8::1']);
+});
+
+test('이유 문구: 한 계정의 실패에는 여러 계정 패턴 이름을 붙이지 않는다', async () => {
+  const one = { id: 'o', timestamp: 't', rule: { level: 6, description: '같은 계정 로그인 실패 4건 뒤에 성공했습니다.' }, data: { srcip: '192.0.2.5', srcuser: 'user01', count: '4' } };
+  const two = { id: 't', timestamp: 't', rule: { level: 7, description: '두 계정에 실패가 2건씩 있고 주소는 같습니다.' }, data: { srcip: '192.0.2.6', srcuser: 'user02', count: '4' } };
+  const d = createDecide({ history: [] });
+  assert.doesNotMatch((await d(one)).reason, /many-accounts/u);
+  assert.match((await d(two)).reason, /many-accounts/u);
 });

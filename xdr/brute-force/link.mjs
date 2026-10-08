@@ -1,6 +1,7 @@
 // 판정 결과를 5단계 로그인 차단 규칙(block-rules.json)과 알림 로그(xdr/alerts.log)로 잇습니다.
 // 차단 후보는 block 판정뿐이고, 같은 주소가 정상 이벤트에도 나오면 정상 사용자일 수 있어 규칙에서 뺍니다.
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
+import { isIP } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { scrub } from './read-alerts.mjs';
@@ -11,7 +12,6 @@ export const RULES_FILE = join(DIR, 'block-rules.json');
 export const ALERTS_LOG = join(ROOT, 'xdr', 'alerts.log');
 const RULE_ID = 'xdr.bf.deny-ip';
 const TTL_MS = 60 * 60 * 1000;
-const IP = /^(?:\d{1,3}\.){3}\d{1,3}$|^[0-9a-f:]{2,39}$/iu;
 
 export function buildBlockRules({ alerts, decisions, now = Date.now(), ttlMs = TTL_MS }) {
   const byId = new Map(alerts.map((a) => [a.id, a]));
@@ -22,7 +22,7 @@ export function buildBlockRules({ alerts, decisions, now = Date.now(), ttlMs = T
   const seen = new Set();
   for (const d of decisions.filter((x) => x.action === 'block')) {
     const srcip = ipOf(d);
-    if (!IP.test(srcip ?? '') || normalIps.has(srcip) || seen.has(srcip)) continue;
+    if (!isIP(String(srcip ?? '')) || normalIps.has(srcip) || seen.has(srcip)) continue;
     seen.add(srcip);
     rules.push({
       ruleId: RULE_ID,

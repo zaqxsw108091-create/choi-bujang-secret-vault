@@ -6,7 +6,7 @@ import { createNotesApi } from '../src/notes-api.mjs';
 import { findBlock } from '../src/xdr-block.mjs';
 import { createDecide, decide } from '../xdr/brute-force/decide.mjs';
 import { buildBlockRules } from '../xdr/brute-force/link.mjs';
-import { readAlerts } from '../xdr/brute-force/read-alerts.mjs';
+import { extractAlert, readAlerts, scrub } from '../xdr/brute-force/read-alerts.mjs';
 
 const fixture = JSON.parse(await readFile(new URL('../xdr/fixtures/brute-force.json', import.meta.url), 'utf8'));
 const decisions = [];
@@ -156,4 +156,29 @@ test('이유 문구: 한 계정의 실패에는 여러 계정 패턴 이름을 �
   const d = createDecide({ history: [] });
   assert.doesNotMatch((await d(one)).reason, /many-accounts/u);
   assert.match((await d(two)).reason, /many-accounts/u);
+});
+
+
+test('경보 읽기: 비밀값처럼 보이는 값은 가리고, 원본 경보는 고치지 않는다', async () => {
+  const jwt = `eyJ${'a'.repeat(12)}.eyJ${'b'.repeat(12)}.${'c'.repeat(12)}`;
+  const alert = {
+    id: 's1',
+    timestamp: '2026-09-27T09:00:00+09:00',
+    rule: { level: 10, description: `password=hunter2 Bearer ${'x'.repeat(20)} ${jwt} ${'Z'.repeat(40)} 실패` },
+    data: { srcip: '203.0.113.1', srcuser: 'user01' },
+  };
+  const before = JSON.stringify(alert);
+  const row = extractAlert(alert);
+  assert.deepEqual(Object.keys(row).sort(), ['description', 'id', 'level', 'srcip', 'time', 'user']);
+  for (const secret of ['hunter2', 'x'.repeat(20), jwt, 'Z'.repeat(40)]) assert.ok(!JSON.stringify(row).includes(secret));
+  assert.match(row.description, /\[가림\]/u);
+  assert.equal(JSON.stringify(alert), before);
+  assert.equal(scrub('로그인 실패 48건'), '로그인 실패 48건');
+});
+
+test('경보 읽기: 읽는 동안 경보 원본 파일을 고치지 않는다', async () => {
+  const path = new URL('../xdr/fixtures/brute-force.json', import.meta.url);
+  const before = await readFile(path, 'utf8');
+  await readAlerts();
+  assert.equal(await readFile(path, 'utf8'), before);
 });

@@ -5,7 +5,7 @@
 // 로그인 토큰의 검사(위조·만료·다른 발급자)와 소유자 검사는 src/verify-login.mjs, src/notes-api.mjs가 그대로 합니다.
 import { clientIp, findBlock, loadBlockRules } from './xdr-block.mjs';
 
-const EMAIL =/^[^\s@]{1,64}@[^\s@]{1,255}$/u;
+const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}$/u;
 const MAX_PASSWORD = 256;
 const MAX_TOKEN = 4096;
 const TIMEOUT_MS = 10000;

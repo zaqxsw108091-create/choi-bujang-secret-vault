@@ -55,6 +55,17 @@ export async function linkResults({ root = ROOT, now = Date.now(), rulesFile = R
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { rules, logged } = await linkResults();
-  console.log(`차단 규칙 ${rules.length}개(1시간 뒤 만료) · 알림 ${logged}줄`);
+  try {
+    const { rules, logged } = await linkResults();
+    console.log(`차단 규칙 ${rules.length}개(1시간 뒤 만료) · 알림 ${logged}줄`);
+    if (process.argv.includes('--db')) {
+      // 공유 저장소(Supabase 표)에도 올립니다. 배포 서버가 이 규칙을 읽으려면 필요합니다. 키는 터미널 환경변수에서만 읽습니다.
+      const { pushRulesFromEnv, BLOCK_TABLE } = await import('../../src/xdr-store.mjs');
+      const { pushed } = await pushRulesFromEnv(rules);
+      console.log(`공유 저장소(${BLOCK_TABLE})에 규칙 ${pushed}개를 올렸습니다.`);
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : '연결 오류');
+    process.exitCode = 1;
+  }
 }

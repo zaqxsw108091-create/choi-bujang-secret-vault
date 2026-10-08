@@ -4,6 +4,7 @@
 // 비밀번호·토큰·키 값은 로그와 오류 응답에 넣지 않습니다. 서버 전용 키는 이 서버 안에서만 씁니다.
 // 로그인 토큰의 검사(위조·만료·다른 발급자)와 소유자 검사는 src/verify-login.mjs, src/notes-api.mjs가 그대로 합니다.
 import { clientIp, findBlock, loadBlockRules } from './xdr-block.mjs';
+import { defaultBlockLookup } from './xdr-store.mjs';
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}$/u;
 const MAX_PASSWORD = 256;
@@ -21,7 +22,7 @@ const readJson = (raw) => {
   return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
 };
 
-export function createAuthApi({ getSettings, fetchImpl = fetch, getBlockRules = () => [], now = () => Date.now() }) {
+export function createAuthApi({ getSettings, fetchImpl = fetch, getBlockRules = () => [], lookupBlock = async () => null, now = () => Date.now() }) {
   // 서버 한곳에서 Supabase 로그인 주소로만 보냅니다. 응답에서 필요한 칸만 꺼냅니다.
   const callAuth = async (grant, payload) => {
     const { url, secretKey } = getSettings();
@@ -51,8 +52,9 @@ export function createAuthApi({ getSettings, fetchImpl = fetch, getBlockRules = 
     }
     const payload = readPayload(readJson(request.body));
     if (!payload) return response.status(400).json({ error: 'INVALID_BODY' });
-    // xdr-01: 만료 전 차단 규칙에 걸린 주소는 Supabase 로 보내지 않고 거부합니다.
-    if (findBlock(getBlockRules(), clientIp(request), now())) {
+    // xdr-01·xdr-02: 만료 전 차단 규칙(규칙 파일 또는 공유 저장소)에 걸린 주소는 Supabase 로 보내지 않고 거부합니다.
+    const ip = clientIp(request);
+    if (findBlock(getBlockRules(), ip, now()) || await lookupBlock(ip, now())) {
       return response.status(403).json({ error: 'BLOCKED_BY_XDR' });
     }
     try {
@@ -103,4 +105,5 @@ export const authApi = createAuthApi({
     return { url, secretKey };
   },
   getBlockRules: () => loadBlockRules(),
+  lookupBlock: defaultBlockLookup,
 });

@@ -103,3 +103,44 @@ test('자료 API: 차단된 주소는 로그인 확인 전에 403, 다른 주소
   assert.equal((await call(rules[0].srcip)).code, 403);
   assert.equal((await call('192.0.2.60')).code, 401);
 });
+
+import { createDecide } from '../xdr/brute-force/decide.mjs';
+
+const burst = (id, at, level, count, extra = {}) => ({
+  id, timestamp: at, rule: { level, description: `로그인 실패 ${count}건이 있습니다.` },
+  data: { srcip: '203.0.113.77', srcuser: 'user09', count: String(count), ...extra },
+});
+
+test('모아 보기: 같은 주소·계정의 실패를 10분 안에서 합쳐 기준을 넘으면 알린다', async () => {
+  const a = burst('a', '2026-09-27T10:00:00+09:00', 8, 6);
+  const b = burst('b', '2026-09-27T10:04:00+09:00', 8, 6);
+  const out = await createDecide({ history: [a, b] })(a);
+  assert.equal(out.action, 'alert');
+  assert.match(out.reason, /합산 12건/u);
+  // 한 건만 있으면 합산이 없고 같은 alert 입니다.
+  assert.doesNotMatch((await createDecide({ history: [a] })(a)).reason, /합산/u);
+});
+
+test('모아 보기: 수준이 높고 합산이 기준을 넘으면 명확한 공격으로 막는다', async () => {
+  const a = burst('a', '2026-09-27T10:00:00+09:00', 11, 6);
+  const b = burst('b', '2026-09-27T10:03:00+09:00', 11, 6);
+  assert.equal((await createDecide({ history: [a, b] })(a)).action, 'block');
+  assert.equal((await createDecide({ history: [a] })(a)).action, 'alert');
+});
+
+test('모아 보기: 10분을 넘으면 합치지 않고, 경보 순서가 바뀌어도 결과가 같다', async () => {
+  const a = burst('a', '2026-09-27T10:00:00+09:00', 11, 6);
+  const far = burst('far', '2026-09-27T10:30:00+09:00', 11, 6);
+  assert.equal((await createDecide({ history: [a, far] })(a)).action, 'alert');
+  const b = burst('b', '2026-09-27T10:03:00+09:00', 11, 6);
+  const one = await createDecide({ history: [a, b] })(a);
+  const two = await createDecide({ history: [b, a] })(a);
+  assert.deepEqual(one, two);
+});
+
+test('모아 보기: 다른 주소의 실패나 성공 뒤 실패는 합치지 않는다', async () => {
+  const a = burst('a', '2026-09-27T10:00:00+09:00', 11, 6);
+  const other = burst('o', '2026-09-27T10:01:00+09:00', 11, 6, { srcip: '198.51.100.77' });
+  const ok = { ...burst('s', '2026-09-27T10:01:00+09:00', 11, 6), rule: { level: 11, description: '로그인 실패 6건 뒤에 성공했습니다.' } };
+  assert.equal((await createDecide({ history: [a, other, ok] })(a)).action, 'alert');
+});

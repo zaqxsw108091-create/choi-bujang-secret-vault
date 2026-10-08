@@ -214,7 +214,7 @@
 ## 보너스 xdr-01: 무차별 로그인 공격 잡기
 
 - 경보 읽기 `xdr/brute-force/read-alerts.mjs`, 패턴 `patterns.json`(MITRE T1110 근거), 판단 `decide.mjs`, 연결 `link.mjs`가 있습니다. 경보는 수업용 가상 Wazuh 묶음이고 실제 로그가 아닙니다.
-- 판단: 패턴 조건을 채운 명확한 공격은 `block`, 애매한 건 `alert`, 정상은 `record`입니다. Jev 연결은 저장소에 없어 `createDecide({ askJev })`로 꽂는 자리만 두었고, 없거나 늦으면 애매한 건 `alert`입니다.
+- 판단: 같은 주소·같은 계정의 실패는 10분 안에서 모아 기준을 넘는지 봅니다(경보 순서와 상관없음). 패턴 조건을 채운 명확한 공격은 `block`, 애매한 건 `alert`, 정상은 `record`입니다. Jev 연결은 저장소에 없어 `createDecide({ askJev })`로 꽂는 자리만 두었고, 없거나 늦으면 애매한 건 `alert`입니다.
 - 차단: `node xdr/brute-force/link.mjs`가 `block` 주소만 1시간 만료 거부 규칙(`block-rules.json`, 근거 경보 번호 포함)과 `xdr/alerts.log`로 만듭니다. 5단계 로그인 함수(`src/auth-api.mjs`)와 자료 API(`src/notes-api.mjs`)가 규칙에 걸린 주소를 403으로 거부하고, 규칙이 없으면 기존 동작 그대로입니다. `src/decider.mjs`는 바꾸지 않았습니다. 이 두 생성 파일은 Git에 올리지 않으며, 배포 서버에는 규칙 파일이 없어 아무도 막지 않습니다.
 - 다시 실행: `npm run xdr:run -- brute-force` 후 `node xdr/brute-force/link.mjs`, 시험은 `node --test test/xdr-brute-force.test.mjs`.
 - 로컬 결과(실행함): block 10 · alert 9 · record 9, 정상 이벤트를 막은 경우 0건. 운영 심판의 판정이 아닙니다.

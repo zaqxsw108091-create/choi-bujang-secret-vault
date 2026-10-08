@@ -253,3 +253,22 @@ test('심판 배치 그대로: 실행기·경보 묶음·decide.mjs 하나만 �
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('이상한 경보가 와도 decide 는 오류를 던지지 않고 올바른 모양을 돌려준다', async () => {
+  const circular = { id: 'c', rule: { level: 12, description: '로그인 실패 50건' }, data: { srcip: '203.0.113.1', srcuser: 'u', count: '50' } };
+  circular.self = circular;
+  const odd = [undefined, null, 0, 'text', [], {}, { id: 5 }, { rule: null }, { rule: { level: 'x' } }, { rule: { level: NaN, description: 7 } },
+    { rule: { level: 99, description: '로그인 실패' }, data: { count: 'abc', accounts: 5 } },
+    { id: 'a', timestamp: 'not-a-date', rule: { level: 11, description: '로그인 실패 30건' }, data: { srcip: '1.1.1.1', srcuser: 'u', count: '30' } },
+    { id: 'e', rule: { level: 11, description: '계정 999999999999개 실패' }, data: { srcip: '2.2.2.2', count: '1e309' } },
+    circular, Object.create(null), () => 1,
+    { id: 'h', rule: { level: 10, description: { toString() { throw new Error('x'); } } }, data: { srcip: { toString() { throw new Error('y'); } } } }];
+  for (const value of odd) {
+    const out = await decide(value);
+    assert.deepEqual(Object.keys(out).sort(), ['action', 'confidence', 'reason']);
+    assert.ok(['block', 'alert', 'record'].includes(out.action));
+    assert.ok(Number.isFinite(out.confidence) && out.confidence >= 0 && out.confidence <= 1);
+    assert.equal(typeof out.reason, 'string');
+    assert.ok(!out.reason.includes('\n'));
+  }
+});

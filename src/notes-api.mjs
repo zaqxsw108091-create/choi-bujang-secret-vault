@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js';
 import config from '../aleph.config.json' with { type: 'json' };
 import { createLoginVerifier } from './verify-login.mjs';
 import { clientIp, findBlock, loadBlockRules } from './xdr-block.mjs';
+import { defaultBlockLookup } from './xdr-store.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const MAX_TITLE = 200;
@@ -42,7 +43,7 @@ function idFromRequest(request) {
   try { return new URL(request.url, 'http://local').pathname.split('/').filter(Boolean).pop() ?? null; } catch { return null; }
 }
 
-export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () => [], now = () => Date.now() }) {
+export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () => [], lookupBlock = async () => null, now = () => Date.now() }) {
   // 모든 요청의 공통 앞부분: 허용 방법 → 서버 설정 → 로그인 확인. 통과한 요청만 handle로 갑니다.
   const guarded = (allowed, handle) => async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
@@ -50,8 +51,9 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
       response.setHeader('Allow', allowed.join(', '));
       return response.status(405).json({ error: 'METHOD_NOT_ALLOWED' });
     }
-    // xdr-01: 만료 전 차단 규칙에 걸린 주소는 로그인 확인 전에 거부합니다. 규칙이 없으면 아무도 막지 않습니다.
-    if (findBlock(getBlockRules(), clientIp(request), now())) {
+    // xdr-01·xdr-02: 만료 전 차단 규칙(규칙 파일 또는 공유 저장소)에 걸린 주소는 로그인 확인 전에 거부합니다. 규칙이 없으면 아무도 막지 않습니다.
+    const ip = clientIp(request);
+    if (findBlock(getBlockRules(), ip, now()) || await lookupBlock(ip, now())) {
       return response.status(403).json({ error: 'BLOCKED_BY_XDR' });
     }
     let verify;
@@ -165,4 +167,5 @@ export const notesApi = createNotesApi({
     return client;
   },
   getBlockRules: () => loadBlockRules(),
+  lookupBlock: defaultBlockLookup,
 });

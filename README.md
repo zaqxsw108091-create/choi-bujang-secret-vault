@@ -71,7 +71,7 @@
 
 - PR을 `main`에 합친 직후 Vercel 배포가 2건 실패했습니다. 원인은 `scripts/deployment-identity.mjs`가 `step`이 1이 아니면 빌드를 막은 것이며, 수정 커밋 `83de753`이 `step` 1~2를 허용합니다. 이 수정이 `main`에 합쳐져 배포가 `Ready`가 되기 전에는 사이트에 옛 배포(공개 `data.json`)가 남아 있을 수 있습니다. 위 1번의 배포 확인이 그 증거입니다.
 - `public/aleph.json`(배포 식별 파일)은 2단계부터 시작 틀 확인 표시(`sampleMarker`)를 내보내지 않습니다. 심판 판정 `S02_MARKER_IN_STATIC`이 정적 응답의 표시를 지적했기 때문입니다. 1단계는 이전과 같습니다.
-- `npm run test:package` 1건(패키징 함수 기준표 일치)은 실패합니다(3단계에서 `api/notes/[id].js`가 늘어 차이가 하나 더 커졌고, 같은 원인입니다). 원래 시작 틀에서는 통과했지만, 2단계 제작 2가 만든 `api/notes.js`가 운영 쪽 고정 기준표(`package/baseline-functions.json`)에 없기 때문입니다. 기준표는 운영 쪽 파일이라 고치지 않았습니다.
+- `npm run test:package`의 함수 기준표 시험은 2단계부터 한동안 실패했습니다. 운영 쪽 고정 기준표(`package/baseline-functions.json`)가 시작 틀의 `api/ai.js`·`api/threat-intel.js`만 알고, 학생이 만든 `api/login.js`·`api/notes.js`·`api/refresh.js`를 몰랐기 때문입니다. 시험은 `api/` 바로 아래 파일만 세므로 `api/notes/[id].js`는 차이에 들어가지 않습니다(이전 설명은 틀렸습니다). **고침(2026-10-08)**: 기준표 파일은 그대로 두고, 시험(`test/package-starter.test.mjs`)에 학생이 만든 함수 세 개를 적었습니다. 함수가 이 목록 밖으로 늘거나 줄면 시험은 여전히 실패합니다. 심판 쪽이 따로 가진 기준표와 어떻게 비교하는지는 확인하지 못했습니다.
 - 빌드 점검: `npm run build -- --local`은 배포 식별 검사를 건너뜁니다. 배포와 같은 조건은 `VERCEL_GIT_PROVIDER=github VERCEL_GIT_REPO_OWNER=<소유자> VERCEL_GIT_REPO_SLUG=<저장소> VERCEL_GIT_COMMIT_SHA=<40자리 커밋> VERCEL_URL=<이름>.vercel.app npm run build`로 확인합니다.
 
 #### 남은 약점
@@ -202,7 +202,7 @@
 ### 5단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
 
 - 작동하는 기능: 4단계의 로그인·소유자 검사에 더해, 메모 자료 요청이 서버 함수 한곳으로 모였고 직접 권한을 거두는 SQL을 준비했습니다(SQL은 학생이 2026-10-07 학습 DB에 적용함).
-- 설정 대조(2026-10-07): `step` 5, `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소, `judgeIssuer`는 바꾸지 않음, `identityProvider`는 4단계와 같음, `allowedRoutes` 5개는 실제 파일과 일치, `originalApiUrl`은 위 주소. `RULE_IDS`는 `starter.deny` 하나뿐입니다.
+- 설정 대조(2026-10-07): `step` 5, `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소, `judgeIssuer`는 바꾸지 않음, `identityProvider`는 4단계와 같음, `allowedRoutes` 7개(메모 5개 + 로그인 2개, 2026-10-08 정정: 처음에 5개로 잘못 적었음)는 실제 파일과 일치, `originalApiUrl`은 위 주소. `RULE_IDS`는 `starter.deny` 하나뿐입니다.
 - 다시 실행: `npm run test:r5`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
 
 ## 다음 단계의 코딩 도구에 전달할 규칙
@@ -215,6 +215,18 @@
 
 - 경보 읽기 `xdr/brute-force/read-alerts.mjs`, 패턴 `patterns.json`(MITRE T1110 근거), 판단 `decide.mjs`, 연결 `link.mjs`가 있습니다. 경보는 수업용 가상 Wazuh 묶음이고 실제 로그가 아닙니다.
 - 판단: 같은 주소·같은 계정의 실패는 10분 안에서, 지금까지 판단한 경보를 모아 기준을 넘는지 봅니다. 심판 격리 환경에서 `decide.mjs` 한 파일만 실행되므로 이 파일은 어떤 모듈도 import 하지 않고(`node:fs`·npm·다른 파일 모두 없음), 패턴 값은 `patterns.json`과 같게 파일 안에 적어 시험이 같은지 확인합니다. 패턴 조건을 채운 명확한 공격은 `block`, 애매한 건 `alert`, 정상은 `record`입니다. Jev 연결은 저장소에 없어 `createDecide({ askJev })`로 꽂는 자리만 두었고, 없거나 늦으면 애매한 건 `alert`입니다.
-- 차단: `node xdr/brute-force/link.mjs`가 `block` 주소만 1시간 만료 거부 규칙(`block-rules.json`, 근거 경보 번호 포함)과 `xdr/alerts.log`로 만듭니다. 5단계 로그인 함수(`src/auth-api.mjs`)와 자료 API(`src/notes-api.mjs`)가 규칙에 걸린 주소를 403으로 거부하고, 규칙이 없으면 기존 동작 그대로입니다. `src/decider.mjs`는 바꾸지 않았습니다. 이 두 생성 파일은 Git에 올리지 않으며, 배포 서버에는 규칙 파일이 없어 아무도 막지 않습니다.
+- 차단: `node xdr/brute-force/link.mjs`가 `block` 주소만 1시간 만료 거부 규칙(`block-rules.json`, 근거 경보 번호 포함)과 `xdr/alerts.log`로 만듭니다. 5단계 로그인 함수(`src/auth-api.mjs`)와 자료 API(`src/notes-api.mjs`)가 규칙에 걸린 주소를 403으로 거부하고, 규칙이 없으면 기존 동작 그대로입니다. `src/decider.mjs`는 바꾸지 않았습니다. 이 두 생성 파일은 Git에 올리지 않으며, 배포 서버에는 규칙 파일이 없습니다. 배포 서버에서도 막으려면 아래 xdr-02의 "공유 저장소"를 켭니다(`node xdr/brute-force/link.mjs --db`도 같은 방식으로 올립니다).
 - 다시 실행: `npm run xdr:run -- brute-force` 후 `node xdr/brute-force/link.mjs`, 시험은 `node --test test/xdr-brute-force.test.mjs`.
 - 로컬 결과(실행함): block 10 · alert 9 · record 9, 정상 이벤트를 막은 경우 0건. 운영 심판의 판정이 아닙니다.
+
+## 보너스 xdr-02: 웹 주입 공격 잡기 (저장점)
+
+- 경보 읽기 `xdr/web-injection/read-alerts.mjs`, 패턴 `patterns.json`(MITRE T1190 근거, 패턴마다 근거 한 줄), 판단 `decide.mjs`, 연결 `link.mjs`가 있습니다. 경보는 수업용 가상 Wazuh 묶음이고 실제 로그가 아닙니다.
+- 패턴 4개: 요청 인자의 SQL 구문, 스크립트 태그, 경로 거슬러 올라가기(`../`) 반복, 명령 구분자. 같은 주소에서 2번 이상 반복되고 경보 수준이 10 이상이면 명확한 공격으로 `block`입니다(2번은 경보 묶음이 "반복은 없습니다"=1번과 "N번 반복됐습니다"로 나눈 경계). 신호가 약한 애매한 건만 Jev에게 확신도를 물어 0.85 이상 `block`, 0.5 이상 `alert`, 그 아래 `record`이고, Jev가 없거나 3초 안에 답이 없으면 `alert`입니다. 정상은 `record`입니다. `decide.mjs`는 어떤 모듈도 import 하지 않고, 패턴 값은 `patterns.json`과 같게 적어 시험이 같은지 확인합니다.
+- Jev 연결은 저장소에 없습니다. `createDecide({ askJev })`로 꽂는 자리만 있고, Jev가 응답하는 경우는 가짜 응답으로만 시험했습니다(실제 Jev 연결은 확인하지 못함).
+- 차단: `node xdr/web-injection/link.mjs`가 확신도 0.85 이상 `block` 주소만 1시간 만료 거부 규칙(`block-rules.json`, 근거 경보 번호 포함)으로 만들고, 정상 이벤트에도 나온 주소는 뺍니다. `block`·`alert`는 `xdr/alerts.log`에 한 줄씩 쌓습니다(정상은 남기지 않음). `src/xdr-block.mjs`가 이 규칙 파일도 함께 읽어 로그인·자료 API가 403으로 거부합니다. `src/decider.mjs`의 기존 규칙은 바꾸지 않았습니다. `block-rules.json`과 `alerts.log`는 Git에 올리지 않습니다. `xdr/alerts.log`는 실행할 때마다 줄이 이어서 쌓이고 xdr-01과 같은 파일을 씁니다(경보 번호 앞글자 `wi-`(이번)·`bf-`(이전)로 구분하고, Windows PowerShell에서는 `Get-Content xdr\alerts.log | Where-Object { $_ -match ' wi-' }`로 이번 줄만 봅니다). 이번 줄만 남기려면 파일을 지우고 다시 실행하며, 이전 알림도 함께 사라집니다. Windows에서 `npm run xdr:run -- web-injection`을 다시 실행하면 `result.json`이 줄바꿈 표시(LF/CRLF)만 달라 `git status`에 "변경됨"으로 보일 수 있습니다. `git diff`에 바뀐 줄이 없으면 `git restore xdr/web-injection/result.json`으로 되돌립니다.
+- **공유 저장소(배포 서버에서도 막기)**: 규칙 파일은 서버 함수끼리 나눠 쓸 수 없어서, 규칙을 Supabase 표 `public.xdr_block_rules`에도 올릴 수 있습니다. 표는 [`sql/xdr-1-block-rules.sql`](sql/xdr-1-block-rules.sql)을 학생이 SQL Editor에서 직접 실행해 만들고(RLS 켬, `anon`·`authenticated` 권한 없음, 서버 전용 키만 읽고 씀), `node xdr/web-injection/link.mjs --db`가 터미널 환경의 `SUPABASE_URL`·`SUPABASE_SECRET_KEY`로 규칙을 올립니다(같은 주소는 덮어씀, 값은 출력하지 않음). 서버는 Vercel 환경변수 `XDR_BLOCK_STORE`에 `supabase`를 넣었을 때만 요청 주소로 이 표를 찾습니다(기본은 꺼짐, 새 비밀값 없음, 이름만 `.env.example`에 있음). 주소별로 30초 기억하고, 표가 느리거나 오류면 막지 않고 통과시킵니다(정상 사용자를 막지 않는 쪽). 코드는 `src/xdr-store.mjs`, 시험은 `node --test test/xdr-store.test.mjs`(가짜 저장소 12건 + 실제 supabase-js 요청 모양 1건).
+- 다시 실행: `npm run xdr:run -- web-injection` 후 `node xdr/web-injection/link.mjs`(배포 서버까지 막으려면 끝에 `--db`), 시험은 `node --test test/xdr-web-injection.test.mjs`.
+- 로컬 결과(실행함, 2026-10-08): block 8 · alert 9 · record 9(경보 26건), 정상 이벤트를 막은 경우 0건. 실제 `api/` 파일에 요청을 보내, 막은 주소 7개는 403, 애매한 건·정상 주소는 막히지 않고 기존 경로까지 가는 것을 확인했습니다. 운영 심판의 판정이 아닙니다.
+- **한계**: 공유 저장소 경로는 코드와 가짜 저장소 시험, 그리고 `sql/xdr-1-block-rules.sql`을 임시 Postgres 엔진(WASM)에서 구역별로 실제 실행한 확인(권한 회수·RLS·덮어쓰기·만료 조회·입력 제한·다시 실행·되돌리기, 2026-10-08)으로 확인했고, 실제 Supabase 표와 배포된 Vercel 서버에서는 아직 확인하지 못했습니다(코딩 도구 환경은 외부 접속이 막혀 있음). 학생이 SQL 실행·환경변수·`--db` 올리기를 한 뒤 직접 확인해야 합니다. 켜기 전에는 배포 서버에서 이 차단이 작동하지 않고 규칙 파일을 만든 로컬 실행에서만 막습니다. 규칙은 1시간 뒤 만료되어 새 경보를 흘릴 때마다 다시 올려야 하고, 올라온 규칙이 서버에 적용되기까지 최대 30초 걸립니다. 주소는 글자 그대로 비교해서 IPv6 표기가 다르면(축약·대소문자) 못 찾을 수 있습니다(시험 경보의 주소는 모두 IPv4). 운영 반 엔진의 사건 전달·접속 회수도 연결되지 않았습니다. 같은 주소의 경보를 모아 합산하지는 않고 경보 하나의 `count`로 판단합니다. Jev는 실제로 연결하지 못했습니다(응답하는 경우는 가짜 응답으로만 시험, 연결 주소·방법이 저장소에 없음).
+- 제출 묶음 점검 고침(2026-10-08): `npm run bundle`의 직접 점검(`src/attack-check.mjs`)은 배포 주소에 접속하지 못하면 `fetch failed` 오류로 스크립트 전체가 멈췄습니다. 이제 요청을 보내지 못한 점검만 `확인하지 못함 (요청을 보내지 못함)`으로 적고 나머지는 실제 응답대로 적습니다(접속이 될 때의 결과는 이전과 같음). 시험은 `node --test test/attack-check.test.mjs`. 심판의 판정이 아닌 학생의 자기 점검입니다.

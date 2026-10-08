@@ -1,0 +1,63 @@
+{
+  "schema": "aleph.xdr.patterns.v1",
+  "moduleKey": "web-injection",
+  "source": "MITRE ATT&CK T1190 Exploit Public-Facing Application",
+  "patterns": [
+    {
+      "name": "sql-in-request-args",
+      "mitre": "T1190",
+      "condition": "같은 주소의 요청 인자(쿼리·본문 값)에 SQL 구문 표기(union select, or 1=1, drop/delete table, insert into)가 2번 이상 반복되고(경보 수준 10 이상), 한 번뿐인 표기·수업 단어(select, sql)만 있는 경우는 해당하지 않는다. 경보 설명이 SQL 구문 표기를 가리키는 경우도 같은 신호로 본다",
+      "match": {
+        "target": "requestArgs",
+        "regex": "\\bunion\\s+(?:all\\s+)?select\\b|\\bor\\s+['\"]?\\d+['\"]?\\s*=\\s*['\"]?\\d+|\\b(?:drop|delete)\\s+(?:table|from)\\b|\\binsert\\s+into\\b",
+        "descriptionRegex": "SQL\\s*(?:구문|표식|표기)|데이터베이스 조회를 이어 붙이는",
+        "flags": "i",
+        "minRepeats": 2,
+        "minLevel": 10
+      },
+      "evidence": "근거: MITRE ATT&CK T1190(외부 공개 앱 악용)의 신호 — 요청 인자 안의 SQL 구문(과제 안내문). 수업 사례: 2023년 MOVEit CVE-2023-34362 SQL 주입(CISA AA23-158A)."
+    },
+    {
+      "name": "script-tag-in-request-args",
+      "mitre": "T1190",
+      "condition": "같은 주소의 요청 인자에 스크립트 태그(<script, 퍼센트 인코딩된 %3Cscript)가 2번 이상 반복되고(경보 수준 10 이상), 한 번뿐인 표기·'script'라는 수업 단어만 있는 경우는 해당하지 않는다. 경보 설명이 스크립트 삽입 표기를 가리키는 경우도 같은 신호로 본다",
+      "match": {
+        "target": "requestArgs",
+        "regex": "<\\s*script\\b|%3c\\s*script\\b",
+        "descriptionRegex": "스크립트\\s*(?:삽입|표식|태그)",
+        "flags": "i",
+        "minRepeats": 2,
+        "minLevel": 10
+      },
+      "evidence": "근거: MITRE ATT&CK T1190(외부 공개 앱 악용)의 신호 — 요청 인자 안의 스크립트 태그(과제 안내문, 「웹 주입 공격을 잡아 냅니다」 방어 도구 설명의 '스크립트 주입 형태')."
+    },
+    {
+      "name": "path-traversal-repeat",
+      "mitre": "T1190",
+      "condition": "같은 주소의 요청 인자에서 경로 거슬러 올라가기(../, ..\\, 퍼센트 인코딩 %2e%2e%2f)가 한 값 안에 2번 이상 이어지는 요청이 2번 이상 반복되고(경보 수준 10 이상), 'up' 같은 일반 단어나 한 번뿐인 표기는 해당하지 않는다. 경보 설명이 경로 거슬러 올라가기·경로 이탈 표기를 가리키는 경우도 같은 신호로 본다",
+      "match": {
+        "target": "requestArgs",
+        "regex": "(?:\\.\\./|\\.\\.\\\\|%2e%2e%2f){2,}",
+        "descriptionRegex": "경로를 여러 단계 거슬러|경로 이탈",
+        "flags": "i",
+        "minRepeats": 2,
+        "minLevel": 10
+      },
+      "evidence": "근거: MITRE ATT&CK T1190(외부 공개 앱 악용)의 신호 — 요청 인자 안의 경로 거슬러 올라가기(../) 반복(과제 안내문)."
+    },
+    {
+      "name": "command-separator-in-request-args",
+      "mitre": "T1190",
+      "condition": "같은 주소의 요청 인자에 명령 구분자(;, &&, ||, |) 뒤 시스템 명령이나 $( 표기가 2번 이상 반복되고(경보 수준 10 이상), 한 번뿐인 구분 문자나 이름 속 기호는 해당하지 않는다. 경보 설명이 명령 구분자 표기를 가리키는 경우도 같은 신호로 본다",
+      "match": {
+        "target": "requestArgs",
+        "regex": "(?:;|&&|\\|\\||\\||%3b)\\s*(?:cat|ls|id|whoami|wget|curl|bash|sh|nc|rm|ping)\\b|\\$\\(",
+        "descriptionRegex": "명령 구분자",
+        "flags": "i",
+        "minRepeats": 2,
+        "minLevel": 10
+      },
+      "evidence": "근거: MITRE ATT&CK T1190(외부 공개 앱 악용)의 신호 — 요청 인자로 명령문을 밀어 넣는 형태(과제 상황 설명 '주소창과 입력 칸으로 명령문을 밀어 넣으려는 요청')."
+    }
+  ]
+}

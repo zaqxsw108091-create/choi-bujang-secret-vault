@@ -218,3 +218,13 @@
 - 차단: `node xdr/brute-force/link.mjs`가 `block` 주소만 1시간 만료 거부 규칙(`block-rules.json`, 근거 경보 번호 포함)과 `xdr/alerts.log`로 만듭니다. 5단계 로그인 함수(`src/auth-api.mjs`)와 자료 API(`src/notes-api.mjs`)가 규칙에 걸린 주소를 403으로 거부하고, 규칙이 없으면 기존 동작 그대로입니다. `src/decider.mjs`는 바꾸지 않았습니다. 이 두 생성 파일은 Git에 올리지 않으며, 배포 서버에는 규칙 파일이 없어 아무도 막지 않습니다.
 - 다시 실행: `npm run xdr:run -- brute-force` 후 `node xdr/brute-force/link.mjs`, 시험은 `node --test test/xdr-brute-force.test.mjs`.
 - 로컬 결과(실행함): block 10 · alert 9 · record 9, 정상 이벤트를 막은 경우 0건. 운영 심판의 판정이 아닙니다.
+
+## 보너스 xdr-02: 웹 주입 공격 잡기 (저장점)
+
+- 경보 읽기 `xdr/web-injection/read-alerts.mjs`, 패턴 `patterns.json`(MITRE T1190 근거, 패턴마다 근거 한 줄), 판단 `decide.mjs`, 연결 `link.mjs`가 있습니다. 경보는 수업용 가상 Wazuh 묶음이고 실제 로그가 아닙니다.
+- 패턴 4개: 요청 인자의 SQL 구문, 스크립트 태그, 경로 거슬러 올라가기(`../`) 반복, 명령 구분자. 같은 주소에서 2번 이상 반복되고 경보 수준이 10 이상이면 명확한 공격으로 `block`입니다(2번은 경보 묶음이 "반복은 없습니다"=1번과 "N번 반복됐습니다"로 나눈 경계). 신호가 약한 애매한 건만 Jev에게 확신도를 물어 0.85 이상 `block`, 0.5 이상 `alert`, 그 아래 `record`이고, Jev가 없거나 3초 안에 답이 없으면 `alert`입니다. 정상은 `record`입니다. `decide.mjs`는 어떤 모듈도 import 하지 않고, 패턴 값은 `patterns.json`과 같게 적어 시험이 같은지 확인합니다.
+- Jev 연결은 저장소에 없습니다. `createDecide({ askJev })`로 꽂는 자리만 있고, Jev가 응답하는 경우는 가짜 응답으로만 시험했습니다(실제 Jev 연결은 확인하지 못함).
+- 차단: `node xdr/web-injection/link.mjs`가 확신도 0.85 이상 `block` 주소만 1시간 만료 거부 규칙(`block-rules.json`, 근거 경보 번호 포함)으로 만들고, 정상 이벤트에도 나온 주소는 뺍니다. `block`·`alert`는 `xdr/alerts.log`에 한 줄씩 쌓습니다(정상은 남기지 않음). `src/xdr-block.mjs`가 이 규칙 파일도 함께 읽어 로그인·자료 API가 403으로 거부합니다. `src/decider.mjs`의 기존 규칙은 바꾸지 않았습니다. `block-rules.json`과 `alerts.log`는 Git에 올리지 않습니다.
+- 다시 실행: `npm run xdr:run -- web-injection` 후 `node xdr/web-injection/link.mjs`, 시험은 `node --test test/xdr-web-injection.test.mjs`.
+- 로컬 결과(실행함, 2026-10-08): block 8 · alert 9 · record 9(경보 26건), 정상 이벤트를 막은 경우 0건. 실제 `api/` 파일에 요청을 보내, 막은 주소 7개는 403, 애매한 건·정상 주소는 막히지 않고 기존 경로까지 가는 것을 확인했습니다. 운영 심판의 판정이 아닙니다.
+- **한계**: 거부 규칙 파일은 Git에 올라가지 않고 1시간 뒤 만료되어, 배포된 Vercel 서버에는 없습니다. 그래서 배포 서버에서는 이 차단이 작동하지 않고, 규칙 파일을 만든 로컬 실행에서만 막습니다. 운영 반 엔진의 사건 전달·접속 회수도 연결되지 않았습니다. 같은 주소의 경보를 모아 합산하지는 않고 경보 하나의 `count`로 판단합니다. `npm run test:package` 1건 실패(기준표가 학생이 만든 `api/login.js`·`api/notes.js`·`api/refresh.js`를 모름)는 위 "알려진 문제"의 기존 문제입니다.

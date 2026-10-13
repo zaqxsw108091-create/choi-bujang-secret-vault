@@ -243,7 +243,8 @@ async function runStep8Checks(doFetch, app) {
       let data = null;
       try { data = JSON.parse(await response.text()); } catch { /* JSON이 아니면 앱의 응답으로 보지 않습니다. */ }
       if (typeof data?.error === 'string') code = data.error;
-      if (Array.isArray(data) || (data && typeof data === 'object' && !code)) {
+      // 자료로 보이는 응답은 성공(2xx) 상태일 때만 셉니다. 404·401 같은 거부 상태의 JSON 오류 본문(Vercel의 404 포함)은 자료가 아닙니다.
+      if (response.ok && (Array.isArray(data) || (data && typeof data === 'object' && !code))) {
         return { attackId, expected, observed: `거부되지 않음 (HTTP ${response.status}, 자료로 보이는 응답)` };
       }
       return { attackId, expected, observed: isRefused(response.status, code)

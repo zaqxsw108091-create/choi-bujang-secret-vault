@@ -63,3 +63,19 @@ test('8단계 직접 요청 점검: 로그인 없는 role 쿼리와 공지 경�
   assert.match(observed(down, 'anon_role_query_refused'), /^확인하지 못함/u);
   assert.match(observed(down, 'notice_route_serves_nothing'), /^확인하지 못함/u);
 });
+
+test('8단계 직접 요청 점검: 플랫폼의 JSON 형식 404(오류 객체)는 자료가 아니라 거부로 적고, 2xx 자료는 거부되지 않음으로 적는다', async () => {
+  const real = globalThis.fetch;
+  const run = async (notices) => {
+    globalThis.fetch = async (url, init = {}) => {
+      const { pathname } = new URL(String(url));
+      if (pathname === '/api/notices') return notices();
+      return fakeFetch()(url, init);
+    };
+    try { return await runAttackChecks(config); } finally { globalThis.fetch = real; }
+  };
+  const platform404 = await run(() => json({ error: { code: 'NOT_FOUND', message: 'The page could not be found' } }, 404));
+  assert.equal(observed(platform404, 'notice_route_serves_nothing'), '거부됨 (HTTP 404)');
+  const leaked = await run(() => json([{ title: '공지' }], 200));
+  assert.match(observed(leaked, 'notice_route_serves_nothing'), /^거부되지 않음/u);
+});

@@ -165,7 +165,10 @@ test('step 8: unknown routes, mismatched route/path/method, feature paths beside
     ['GET', 'GET /notes/:id', '/notes'], ['GET', 'GET /notes', `/notes/${ID}`],
     ['POST', 'GET /notes/:id', `/notes/${ID}`], ['GET', 'GET /notices/:id', '/notices/week-1'],
     ['GET', 'GET /notices', '/notices'], ['PUT', 'PUT /notes/:id', '/notices/week-1'],
-    ['GET', 'GET /other', '/other'], ['GET', undefined, `/notes/${ID}`], [undefined, 'GET /notes', '/notes'],
+    ['GET', 'GET /other', '/other'],
+    ['GET', 'GET /notes/:id', `//notes/${ID}`], ['GET', 'GET /notes/:id', `/notes//${ID}`],
+    ['GET', 'GET /notes/:id', `/notes/${ID}/`], ['GET', 'GET /notes/:id', `notes/${ID}`],
+    ['GET', 'GET /notes', '/notes/'], ['GET', 'GET /notes', '/notes#x'], ['GET', undefined, `/notes/${ID}`], [undefined, 'GET /notes', '/notes'],
   ];
   for (const [m, r, p] of cases) {
     const req = zoneRequest(m, r, p);

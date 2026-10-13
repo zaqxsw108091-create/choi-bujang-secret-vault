@@ -65,7 +65,8 @@ export function zoneOf(request) {
   if (typeof subjectId !== 'string' || !subjectId || !/^[0-9a-f]{16}$/u.test(deviceId ?? '')) return null;
   const zone = ZONES.get(routeKey(route));
   if (!zone || typeof method !== 'string' || routeKey(route).split(' ')[0] !== method) return null;
-  if (typeof path !== 'string' || /[?#]/u.test(path)) return null;
+  // 경로는 글자 그대로 정확해야 합니다: 맨 앞 '/', 빈 조각(//)·끝 '/'·쿼리·조각 없음. 모양이 다르면 모르는 경로입니다.
+  if (typeof path !== 'string' || !/^(?:\/api)?\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)?$/u.test(path)) return null;
   const resource = resourceIdOf(`/api${noApi(path).startsWith('/') ? noApi(path) : `/${noApi(path)}`}`);
   if (!resource || resource.split(':')[0] !== zone.kind) return null;
   if ((resource === `${zone.kind}:collection`) === zone.id) return null;

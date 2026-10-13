@@ -1,7 +1,7 @@
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  if (![1, 2, 3, 4, 5, 6, 7, 8].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
   try {
     app = new URL(config.publicAppUrl);
@@ -14,7 +14,7 @@ export async function runAttackChecks(config) {
   }
   if (typeof config.sampleMarker !== 'string' || !config.sampleMarker) throw new Error('가상 메모의 확인 표시를 넣어 주세요.');
   const get = (path) => fetch(new URL(path, app), { redirect: 'error', signal: AbortSignal.timeout(10000) });
-  if (config.step >= 4 && config.step <= 7) return runStep4Checks(fetch, app, config);
+  if (config.step >= 4 && config.step <= 8) return runStep4Checks(fetch, app, config);
   if (config.step === 3) return runStep3Checks(fetch, app, config.sampleMarker);
   if (config.step === 2) return runStep2Checks(get, config.sampleMarker);
   const response = await get('/data.json');
@@ -221,6 +221,7 @@ async function runStep4Checks(doFetch, app, config) {
       results.push({ attackId: loginId, expected: loginExpected, observed: '확인하지 못함 (요청을 보내지 못함)' });
     }
   }
+  if (config.step >= 8) results.push(...await runStep8Checks(doFetch, app));
   for (const [attackId, what] of [['other_owner_read_refused', '남의 메모 읽기(GET /api/notes/:id)'],
     ['other_owner_update_refused', '남의 메모 수정(PUT /api/notes/:id)'],
     ['other_owner_delete_refused', '남의 메모 삭제(DELETE /api/notes/:id)']]) {
@@ -228,4 +229,33 @@ async function runStep4Checks(doFetch, app, config) {
       observed: '미실행 (A·B 두 계정의 로그인이 필요해 이 파일은 보내지 않음. 화면 확인 결과는 README 참고)' });
   }
   return results;
+}
+
+// 8단계: 화면 메뉴를 거치지 않고 주소로 직접 보내는 요청입니다. 로그인 없이 보내므로 자료가 생기거나 바뀌지 않습니다.
+// (1) 쿼리에 role=instructor를 실어도 로그인 없는 요청은 거부되는지 (2) 공지 경로 /api/notices는 서버가 자료를 내주지 않는지 봅니다.
+// 상태 번호만 기록합니다. 다른 구역 자료가 나오는지는 두 계정 로그인이 필요해 미실행으로 남깁니다. 심판의 판정이 아닙니다.
+async function runStep8Checks(doFetch, app) {
+  const probe = async (attackId, expected, path, isRefused) => {
+    try {
+      const response = await doFetch(new URL(path, app), { redirect: 'error', signal: AbortSignal.timeout(10000),
+        headers: { Accept: 'application/json' } });
+      let code = null;
+      let data = null;
+      try { data = JSON.parse(await response.text()); } catch { /* JSON이 아니면 앱의 응답으로 보지 않습니다. */ }
+      if (typeof data?.error === 'string') code = data.error;
+      if (Array.isArray(data) || (data && typeof data === 'object' && !code)) {
+        return { attackId, expected, observed: `거부되지 않음 (HTTP ${response.status}, 자료로 보이는 응답)` };
+      }
+      return { attackId, expected, observed: isRefused(response.status, code)
+        ? `거부됨 (HTTP ${response.status})` : `확인하지 못함 또는 예상 밖 (HTTP ${response.status})` };
+    } catch {
+      return { attackId, expected, observed: '확인하지 못함 (요청을 보내지 못함)' };
+    }
+  };
+  return [
+    await probe('anon_role_query_refused', '로그인 없이 쿼리에 role=instructor를 실은 GET /api/notes가 거부됨',
+      '/api/notes?role=instructor', (status, code) => status === 401 && code === 'LOGIN_REQUIRED'),
+    await probe('notice_route_serves_nothing', '로그인 없는 GET /api/notices가 자료를 내주지 않음(공지 경로는 만들지 않음)',
+      '/api/notices', (status) => status === 404 || status === 401),
+  ];
 }

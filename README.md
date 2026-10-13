@@ -248,7 +248,7 @@
 
 ## 7단계: 평소와 다른 접속은 다시 확인합니다
 
-`src/decider.mjs`에 입력 검사 `readSignals`와 규칙 `step_up_required`를 더했습니다. `RULE_IDS`는 실제로 구현한 `device_registered`, `step_up_required` 두 개입니다. 계약에 있는 `request.signals`, `request.recentEvents`, `request.stepUp`만 읽습니다([`docs/DECIDER_REQUEST.md`](docs/DECIDER_REQUEST.md)).
+`src/decider.mjs`에 입력 검사 `readSignals`와 규칙 `step_up_required`를 더했습니다. `RULE_IDS`는 (7단계 당시 기록. 8단계의 규칙은 아래 "8단계" 절) 실제로 구현한 `device_registered`, `step_up_required` 두 개였습니다. 계약에 있는 `request.signals`, `request.recentEvents`, `request.stepUp`만 읽습니다([`docs/DECIDER_REQUEST.md`](docs/DECIDER_REQUEST.md)).
 
 - 입력 검사: `signals.source`가 `none`이면 출처 없음, `judge_fixture`면 심판 가상 요청(실제 접속 증거 아님), 그 밖은 출처 불명확입니다. 지역·네트워크·시각 값은 가상 요청일 때만 읽고, 없거나 `unknown`이거나 형식·범위가 틀리면 `null`로 둡니다. 정상값으로 채우지 않습니다. 헤더나 최상위 `region`·`network` 같은 값은 읽지 않으므로 위조한 값이 신뢰하는 접속 정보로 올라가지 않습니다.
 - 규칙: 밤 0~5시, 처음 보는 네트워크(`unusual`), 최근 사건의 `risk_signal` 합계 20건 이상이 **모두** 참일 때 `step_up`과 이유 코드 `step_up_required`를 돌려줍니다. 기준값(0~5시, 20건)은 연습용 가상 요청에 맞춘 값이며 계약에 정해진 숫자가 아닙니다. 하나라도 빠지면 허용합니다. 지역은 조건이 아니라서 지역 하나만으로는 막거나 추가 확인을 하지 않고, 이 규칙은 `deny`를 쓰지 않습니다(영구 차단 없음).
@@ -268,6 +268,32 @@
 - 설정 대조(2026-10-13): `aleph.config.json`은 `step` 7(빌드·배포 식별·점검 스크립트의 허용 목록에 7을 더함), `repoUrl`·`publicAppUrl`·`judgeIssuer`·`identityProvider`·`allowedRoutes` 7개·`originalApiUrl`은 6단계와 같음. `RULE_IDS`는 구현한 두 규칙만입니다.
 - `src/attack-check.mjs`는 7단계에서 6단계와 같은 점검을 보냅니다. 판정기 규칙은 배포 서버 경로에 연결돼 있지 않아 추가 확인 점검은 **미실행**입니다.
 - 다시 실행: `npm run decider:test`, `npm run fixture:7`, `node --test test/*.mjs`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
+
+## 8단계: 자료마다 갈 수 있는 구역을 나눕니다
+
+세 가지를 더했습니다. 자료 주소, 화면, 메뉴는 바꾸지 않았습니다.
+
+- **자원 ID** (`src/resources.mjs`): 요청 경로에서만 자원 ID를 만듭니다. 메모는 `note:<UUID>`(목록·추가는 `note:collection`), 강사 공지는 `notice:<ID>`(`notice:collection`)로 서로 다른 종류입니다. `export`·`search` 같은 이름은 `:id` 자리의 ID로 읽지 않아, 같은 깊이에 기능 경로를 둘 수 없습니다. 로그인을 통과한 요청에는 응답 헤더 `X-Resource-Id`가 붙고, 로그인에 실패한 요청에는 붙지 않습니다.
+- **판정기 구역 규칙** (`src/decider.mjs`): `RULE_IDS`는 `device_registered`, `step_up_required`, `note_zone_self`, `notice_zone_staff_only`, `route_unknown` 다섯 개입니다. 엔진이 확인한 `subjectId`·`deviceId`·`method`·`route`·`path`만 읽고(`/api` 접두사는 뗍니다), 쿼리(`queryLength`, `querySha256`)는 판정에 쓰지 않습니다. 허용: `GET·POST /notes`, `GET·PUT·DELETE /notes/:id`. 거부: `PUT /notices/:id`(규칙 `notice_zone_staff_only`), 표에 없는 모든 경로와 route·path·method가 서로 안 맞는 요청(규칙 `route_unknown`). 기기 규칙과 추가 확인 규칙은 그대로입니다.
+- **자료 API 소유자 재대조** (`src/notes-api.mjs`): 목록과 한 건 읽기에서 돌려줄 행의 저장된 `owner_id`가 서버가 검증한 사용자 ID와 같은지 한 번 더 비교합니다. 다르면 403이고, 거부 사유 코드(`login_required`, `not_owner`, `owner_mismatch`)만 서버 로그에 남깁니다(메모 내용·토큰·사용자 ID는 로그에 없음). 요청 본문·쿼리·헤더의 `role`·`owner_id`·`userId`는 읽지 않습니다.
+
+### 8단계 확인 순서
+
+1. `node --test test/*.mjs`를 실행합니다(처음에는 `npm ci`). 8단계 시험(자원 ID, 구역 규칙, 직접 API 요청, 소유자 재대조, 직접 요청 점검)이 모두 통과해야 합니다.
+2. `npm run decider:test`와 `npm run fixture:7`을 실행합니다(가상 요청 연습이며 심판 판정이 아닙니다).
+3. 배포된 화면에서 직접 확인: 로그인한 뒤 F12 > Network에서 `/api/notes`를 눌러 Response Headers에 `x-resource-id: note:collection`이 있는지 봅니다. 본인 메모는 열리고(200), 로그인 없이 부르면 401입니다.
+
+### 8단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
+
+- 작동하는 기능: 7단계까지에 더해, 메모와 공지의 자원 ID 구분, 판정기의 구역 규칙, 자료 API의 소유자 재대조가 로컬 시험에서 작동합니다. 정상 요청(본인 메모 목록·추가·읽기·수정·삭제)은 그대로 통과합니다.
+- 설정 대조(2026-10-13): `aleph.config.json`은 `step` 8(빌드·배포 식별·점검 스크립트의 허용 목록에 8을 더함), `repoUrl`·`publicAppUrl`·`judgeIssuer`·`identityProvider`·`allowedRoutes` 7개·`originalApiUrl`은 7단계와 같습니다. `RULE_IDS`는 위 다섯 규칙만이며 모두 구현했습니다.
+- **한계·미실행**:
+  - 판정기는 자료의 주인과 강사 역할을 알 수 없습니다(계약에 항목이 없음). "B가 A의 메모를 요청"은 판정기에서는 A의 요청과 같게 허용되고, 실제로는 자료 API의 소유자 검사(403)가 막습니다. 공지 수정은 누가 보내든 거부합니다.
+  - 강사 공지 API와 저장된 강사 권한 표는 이 저장소에 없습니다. 그래서 자료 API에서 저장된 강사 권한과의 대조는 하지 않았고, `/api/notices`는 만들지 않았습니다(`allowedRoutes`에도 없음).
+  - `api/`의 서버 함수는 판정기를 부르지 않으므로 판정기 규칙이 실제 요청에 연결됐는지는 확인하지 못했습니다. 새 이유 코드 `route_not_allowed`·`zone_denied`가 운영 등록부에 있는지도 확인하지 못했습니다.
+  - 배포된 서버에서의 직접 요청(본인 200, 다른 계정 403, 공지 거부)은 코딩 도구 환경이 외부 접속이 막혀 **미실행**입니다. 학생이 위 확인 순서 3번과 두 계정(A·B)으로 직접 확인해야 합니다.
+- `src/attack-check.mjs`는 8단계에서 7단계와 같은 점검에 로그인 없는 `GET /api/notes?role=instructor`(거부 기대)와 `GET /api/notices`(자료를 내주지 않음 기대)를 더합니다. 둘 다 로그인 없는 요청이며 상태 번호만 기록합니다. 다른 계정의 메모 읽기·수정·삭제는 두 계정 로그인이 필요해 **미실행**으로 남습니다. 심판의 판정이 아닙니다.
+- 다시 실행: `node --test test/*.mjs`, `npm run decider:test`, `npm run fixture:7`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
 
 ## 다음 단계의 코딩 도구에 전달할 규칙
 

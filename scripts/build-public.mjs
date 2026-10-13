@@ -7,7 +7,7 @@ const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'data.json');
 const output = resolve(root, 'public', 'data.json');
 const config = JSON.parse(await readFile(resolve(root, 'aleph.config.json'), 'utf8'));
-if (![1, 2, 3, 4, 5, 6, 7].includes(config.step)) {
+if (![1, 2, 3, 4, 5, 6, 7, 8].includes(config.step)) {
   throw new Error('8단계 이후의 빌드 흐름은 해당 단계에서 확인하세요(공개 data.json 복사는 2단계부터 끝났습니다).');
 }
 if (config.step === 1) {

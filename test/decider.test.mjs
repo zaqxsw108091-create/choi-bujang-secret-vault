@@ -11,8 +11,8 @@ const shape = (request, out) => {
   assert.ok(out.ruleIds.length > 0 && out.ruleIds.every(id => RULE_IDS.includes(id)));
 };
 
-test('RULE_IDS names exactly the two implemented rules', () => {
-  assert.deepEqual([...RULE_IDS], ['device_registered', 'step_up_required']);
+test('RULE_IDS names exactly the implemented rules', () => {
+  assert.deepEqual([...RULE_IDS], ['device_registered', 'step_up_required', 'note_zone_self', 'notice_zone_staff_only', 'route_unknown']);
 });
 
 test('a registered device is allowed', async () => {
@@ -131,5 +131,64 @@ test('re-login sequence (virtual events only): blocked before, new request allow
   assert.equal(out.decision, 'allow');
   assert.equal(JSON.stringify(out).includes('TOKEN_SHOULD_NOT_APPEAR'), false);
   // 같은 새 로그인 값이어도 이전 요청은 그대로 추가 확인입니다(판정은 요청마다 따로).
+  assert.equal((await decide(suspicious)).decision, 'step_up');
+});
+
+// ---- 8단계 제작 2: 구역 규칙 ----
+const ID = '55555555-5555-4555-8555-555555555555';
+const zoneRequest = (method, route, path, extra = {}) => ({ ...fixtureRequests().normal, requestId: crypto.randomUUID(), method, route, path, ...extra });
+
+test('step 8: own-note read, edit, list, add and delete stay allowed (also with the /api prefix)', async () => {
+  for (const [m, r, p] of [['GET', 'GET /notes/:id', `/notes/${ID}`], ['PUT', 'PUT /notes/:id', `/notes/${ID}`],
+    ['DELETE', 'DELETE /notes/:id', `/notes/${ID}`], ['GET', 'GET /notes', '/notes'], ['POST', 'POST /notes', '/notes'],
+    ['PUT', 'PUT /api/notes/:id', `/api/notes/${ID}`]]) {
+    const req = zoneRequest(m, r, p);
+    const out = await decide(req);
+    shape(req, out);
+    assert.equal(out.decision, 'allow', `${m} ${p}`);
+    assert.deepEqual(out.ruleIds, ['note_zone_self']);
+  }
+});
+
+test('step 8: a notice edit by an ordinary student is denied, and a request-borne role cannot change it', async () => {
+  const req = zoneRequest('PUT', 'PUT /notices/:id', '/notices/week-1', { role: 'instructor', identity: 'teacher' });
+  const out = await decide(req);
+  shape(req, out);
+  assert.equal(out.decision, 'deny');
+  assert.deepEqual(out.ruleIds, ['notice_zone_staff_only']);
+});
+
+test('step 8: unknown routes, mismatched route/path/method, feature paths beside :id and bad ids are denied', async () => {
+  const cases = [
+    ['GET', 'GET /notes/:id', '/notes/export'], ['GET', 'GET /notes/:id', '/notes/not-a-uuid'],
+    ['GET', 'GET /notes/:id', `/notes/${ID}/export`], ['GET', 'GET /notes/:id', `/notes/${ID}?x=1`],
+    ['GET', 'GET /notes/:id', '/notes'], ['GET', 'GET /notes', `/notes/${ID}`],
+    ['POST', 'GET /notes/:id', `/notes/${ID}`], ['GET', 'GET /notices/:id', '/notices/week-1'],
+    ['GET', 'GET /notices', '/notices'], ['PUT', 'PUT /notes/:id', '/notices/week-1'],
+    ['GET', 'GET /other', '/other'],
+    ['GET', 'GET /notes/:id', `//notes/${ID}`], ['GET', 'GET /notes/:id', `/notes//${ID}`],
+    ['GET', 'GET /notes/:id', `/notes/${ID}/`], ['GET', 'GET /notes/:id', `notes/${ID}`],
+    ['GET', 'GET /notes', '/notes/'], ['GET', 'GET /notes', '/notes#x'], ['GET', undefined, `/notes/${ID}`], [undefined, 'GET /notes', '/notes'],
+  ];
+  for (const [m, r, p] of cases) {
+    const req = zoneRequest(m, r, p);
+    const out = await decide(req);
+    shape(req, out);
+    assert.equal(out.decision, 'deny', `${m} ${r} ${p}`);
+  }
+});
+
+test('step 8: the query never picks the feature or the resource, and a missing user or bad device is denied', async () => {
+  const base = zoneRequest('GET', 'GET /notes/:id', `/notes/${ID}`);
+  const withQuery = { ...base, queryLength: 40, querySha256: 'b'.repeat(64) };
+  assert.equal((await decide(withQuery)).decision, (await decide(base)).decision);
+  for (const bad of [{ subjectId: '' }, { subjectId: undefined }, { deviceId: 'xyz' }, { deviceId: undefined }]) {
+    assert.equal((await decide({ ...base, ...bad })).decision, 'deny');
+  }
+  assert.equal((await decide({ ...base, deviceRegistered: false })).reasonCode, 'device_not_registered');
+});
+
+test('step 8: the step-up rule still applies to a known route', async () => {
+  const { suspicious } = fixtureRequests();
   assert.equal((await decide(suspicious)).decision, 'step_up');
 });

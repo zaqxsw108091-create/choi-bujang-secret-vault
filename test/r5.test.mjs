@@ -50,7 +50,10 @@ test('build identity uses Vercel Git and deployment metadata', () => {
   const step7 = deploymentIdentity(env, { ...config, step: 7 });
   assert.equal(step7.step, 7);
   assert.equal('sampleMarker' in step7, false);
-  assert.throws(() => deploymentIdentity(env, { ...config, step: 8 }));
+  const step8 = deploymentIdentity(env, { ...config, step: 8 });
+  assert.equal(step8.step, 8);
+  assert.equal('sampleMarker' in step8, false);
+  assert.throws(() => deploymentIdentity(env, { ...config, step: 9 }));
   assert.throws(() => deploymentIdentity({ ...env, VERCEL_GIT_PROVIDER: undefined }, config));
   assert.throws(() => deploymentIdentity({ ...env, VERCEL_GIT_COMMIT_SHA: 'short' }, config));
 });
@@ -181,7 +184,12 @@ class FakeQuery {
   }
 }
 
-function makeApi({ rows = [], configured = true } = {}) {
+// 질의의 owner_id 조건이 빠진 DB를 흉내 냅니다(8단계: API가 저장된 소유자를 한 번 더 대조하는지 확인).
+class LeakyQuery extends FakeQuery {
+  eq(column, value) { return column === 'owner_id' ? this : super.eq(column, value); }
+}
+
+function makeApi({ rows = [], configured = true, leaky = false } = {}) {
   const verify = createLoginVerifier({ config: realConfig, supabaseClient: { auth: {
     getClaims: async (token) => {
       const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
@@ -189,7 +197,7 @@ function makeApi({ rows = [], configured = true } = {}) {
     } } } });
   const api = createNotesApi({
     getVerifier: () => { if (!configured) throw new Error('missing_env'); return verify; },
-    getSupabase: () => ({ from: () => new FakeQuery(rows) }),
+    getSupabase: () => ({ from: () => new (leaky ? LeakyQuery : FakeQuery)(rows) }),
   });
   const call = async (handler, { method = 'GET', authorization, body, id } = {}) => {
     const out = { headers: {} };
@@ -205,8 +213,8 @@ function makeApi({ rows = [], configured = true } = {}) {
   return { rows, list: o => call(api.collection, o), item: o => call(api.item, o) };
 }
 
-test('aleph.config.json is at step 7 and names the login issuer and the seven real API routes', () => {
-  assert.equal(realConfig.step, 7);
+test('aleph.config.json is at step 8 and names the login issuer and the seven real API routes', () => {
+  assert.equal(realConfig.step, 8);
   assert.equal(realConfig.originalApiUrl, 'https://vskaxngivuhucmbnoagz.supabase.co/rest/v1/notes');
   assert.doesNotThrow(() => createLoginVerifier({ config: realConfig,
     supabaseClient: { auth: { getClaims: async () => ({}) } } }));
@@ -621,5 +629,76 @@ test('step 5 attack check: with no key in the page the direct probe is not run, 
     assert.equal(JSON.stringify(out).includes('wrong-password-for-check'), false);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+// ---- 8단계 제작 1: 메모와 강사 공지는 서로 다른 자원 ID를 갖습니다 ----
+test('step 8: resource ids come from the path only; notes and notices never share an id', async () => {
+  const { resourceIdOf } = await import('../src/resources.mjs');
+  const id = '33333333-3333-4333-8333-333333333333';
+  assert.equal(resourceIdOf('/api/notes'), 'note:collection');
+  assert.equal(resourceIdOf(`/api/notes/${id.toUpperCase()}?owner=x`), `note:${id}`);
+  assert.equal(resourceIdOf('/api/notices'), 'notice:collection');
+  assert.equal(resourceIdOf('/api/notices/week-1'), 'notice:week-1');
+  assert.notEqual(resourceIdOf('/api/notices/week-1'), resourceIdOf(`/api/notes/${id}`));
+  for (const bad of ['/api/notes/not-a-uuid', '/api/notes/x/y', '/api/login', '/', '', null, undefined]) {
+    assert.equal(resourceIdOf(bad), null);
+  }
+});
+
+test('step 8: a logged-in note request carries X-Resource-Id; a refused one carries none; bodies are unchanged', async () => {
+  const api = makeApi();
+  const authorization = bearer(A);
+  const denied = await api.list({});
+  assert.equal(denied.status, 401);
+  assert.equal(denied.headers['X-Resource-Id'], undefined);
+  const created = await api.list({ method: 'POST', authorization, body: { title: '메모', body: '가상' } });
+  assert.equal(created.status, 201);
+  assert.equal(created.headers['X-Resource-Id'], 'note:collection');
+  assert.deepEqual(Object.keys(created.body), ['id']);
+  const read = await api.item({ authorization, id: created.body.id });
+  assert.equal(read.headers['X-Resource-Id'], `note:${created.body.id}`);
+  assert.deepEqual(Object.keys(read.body), ['id', 'title', 'body']);
+});
+
+test('step 8: direct API requests never return another zone\'s note, even with a role in the body, query or header', async () => {
+  const rows = seedRows();
+  const before = JSON.stringify(rows);
+  const api = makeApi({ rows });
+  const logs = [];
+  const warn = console.warn;
+  console.warn = (...args) => logs.push(args.join(' '));
+  try {
+    const authorization = bearer(B, { user_metadata: { role: 'instructor' }, app_metadata: { role: 'admin' } });
+    const get = await api.item({ authorization, id: A_NOTE });
+    assert.deepEqual([get.status, get.body], [403, { error: 'FORBIDDEN' }]);
+    const put = await api.item({ method: 'PUT', authorization, id: A_NOTE,
+      body: { title: '가로챔', body: '바뀜', role: 'instructor', owner_id: B } });
+    assert.equal(put.status, 403);
+    const list = await api.list({ authorization });
+    assert.ok(list.body.every(note => note.id !== A_NOTE));
+    assert.equal(JSON.stringify(list.body).includes('owner_id'), false);
+    assert.equal((await api.list({})).status, 401);
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(JSON.stringify(rows), before);
+  assert.ok(logs.some(line => line.includes('not_owner')) && logs.some(line => line.includes('login_required')));
+  assert.equal(logs.some(line => line.includes(A_NOTE) || line.includes(B) || line.includes('가상')), false);
+});
+
+test('step 8: even if the query layer ignored the owner condition, the API compares the stored owner again', async () => {
+  const rows = seedRows();
+  const api = makeApi({ rows, leaky: true });
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const get = await api.item({ authorization: bearer(B), id: A_NOTE });
+    assert.deepEqual([get.status, get.body], [403, { error: 'FORBIDDEN' }]);
+    const list = await api.list({ authorization: bearer(B) });
+    assert.equal(list.status, 200);
+    assert.ok(list.body.every(note => rows.find(row => row.id === note.id).owner_id === B));
+  } finally {
+    console.warn = warn;
   }
 });

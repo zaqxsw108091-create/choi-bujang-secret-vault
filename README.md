@@ -205,6 +205,26 @@
 - 설정 대조(2026-10-07): `step` 5, `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소, `judgeIssuer`는 바꾸지 않음, `identityProvider`는 4단계와 같음, `allowedRoutes` 7개(메모 5개 + 로그인 2개, 2026-10-08 정정: 처음에 5개로 잘못 적었음)는 실제 파일과 일치, `originalApiUrl`은 위 주소. `RULE_IDS`는 `starter.deny` 하나뿐입니다.
 - 다시 실행: `npm run test:r5`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
 
+## 6단계: 등록한 기기만 자료실에 들어옵니다
+
+`src/decider.mjs`에 규칙 `device_registered` 하나를 더했습니다(`RULE_IDS`는 `starter.deny`, `device_registered`). 이번 단계에는 따로 설치할 접속 프로그램이 없습니다. 판정 요청 계약은 [`docs/DECIDER_REQUEST.md`](docs/DECIDER_REQUEST.md)이고, 규칙은 계약에 있는 `request.deviceRegistered`만 읽습니다.
+
+- 등록 기기(`deviceRegistered`가 정확히 `true`)의 `GET` 요청: `allow`, 이유 코드 `approved`.
+- 미등록(`false`)이거나 값이 없거나 `true`가 아닌 값: `deny`, 이유 코드 `device_not_registered`.
+- 등록 기기라도 `GET`이 아닌 요청은 시작점 규칙대로 `deny`(`starter_not_ready`)입니다.
+- 기존 자료실 주소와 브라우저 화면은 바꾸지 않았습니다.
+
+### 6단계 확인 순서
+
+1. 터미널에서 `npm run decider:test`를 실행합니다.
+2. 출력에서 아래 두 줄이 모두 `통과`로 나오는지 봅니다.
+   - `통과 · 등록 기기의 정상 요청` (등록 기기는 허용)
+   - `통과 · 미등록 기기의 가상 요청` (미등록 기기는 `deny`·`device_not_registered`로 거부)
+3. 마지막 줄 `이 명령은 가상 요청으로 연습하며 심판 통과 증거가 아닙니다.`가 나옵니다. 하나라도 `확인 필요`로 나오면 첫 오류만 보고 한 가지를 고칩니다.
+
+- 실행 결과(실행함, 2026-10-13): 위 두 줄이 모두 `통과`였고, 같은 가상 요청의 판정은 등록 `allow`·`approved`, 미등록 `deny`·`device_not_registered`였습니다.
+- 한계: 이 시험은 가상 요청 연습입니다. 실제 미등록 기기로 들어오는 공격 시험과 판정은 심판이 맡으며, 심판 판정이나 반 엔진 연결은 확인하지 못했습니다. 배포·포털 점수도 확인하지 못했습니다.
+
 ## 다음 단계의 코딩 도구에 전달할 규칙
 
 [AGENTS.md](AGENTS.md)를 먼저 읽히고 한 번에 한 제작 단위만 요청하세요. 2단계부터는 자료 보호를 구현할 때 `public/data.json`을 복사하는 1단계 빌드 흐름도 함께 바꿔야 합니다. 3단계 이후의 로그인, 허용 경로, 5단계의 원본 API 주소, 6단계 이후 정책 규칙은 해당 단계 원고와 계약에 맞춰 추가합니다. 비밀번호·토큰·서버 전용 키·실제 학생 기록을 코드, Git, 제출 묶음에 넣지 않습니다.

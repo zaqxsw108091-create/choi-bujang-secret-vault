@@ -623,3 +623,32 @@ test('step 5 attack check: with no key in the page the direct probe is not run, 
     globalThis.fetch = originalFetch;
   }
 });
+
+// ---- 8단계 제작 1: 메모와 강사 공지는 서로 다른 자원 ID를 갖습니다 ----
+test('step 8: resource ids come from the path only; notes and notices never share an id', async () => {
+  const { resourceIdOf } = await import('../src/resources.mjs');
+  const id = '33333333-3333-4333-8333-333333333333';
+  assert.equal(resourceIdOf('/api/notes'), 'note:collection');
+  assert.equal(resourceIdOf(`/api/notes/${id.toUpperCase()}?owner=x`), `note:${id}`);
+  assert.equal(resourceIdOf('/api/notices'), 'notice:collection');
+  assert.equal(resourceIdOf('/api/notices/week-1'), 'notice:week-1');
+  assert.notEqual(resourceIdOf('/api/notices/week-1'), resourceIdOf(`/api/notes/${id}`));
+  for (const bad of ['/api/notes/not-a-uuid', '/api/notes/x/y', '/api/login', '/', '', null, undefined]) {
+    assert.equal(resourceIdOf(bad), null);
+  }
+});
+
+test('step 8: a logged-in note request carries X-Resource-Id; a refused one carries none; bodies are unchanged', async () => {
+  const api = makeApi();
+  const authorization = bearer(A);
+  const denied = await api.list({});
+  assert.equal(denied.status, 401);
+  assert.equal(denied.headers['X-Resource-Id'], undefined);
+  const created = await api.list({ method: 'POST', authorization, body: { title: '메모', body: '가상' } });
+  assert.equal(created.status, 201);
+  assert.equal(created.headers['X-Resource-Id'], 'note:collection');
+  assert.deepEqual(Object.keys(created.body), ['id']);
+  const read = await api.item({ authorization, id: created.body.id });
+  assert.equal(read.headers['X-Resource-Id'], `note:${created.body.id}`);
+  assert.deepEqual(Object.keys(read.body), ['id', 'title', 'body']);
+});

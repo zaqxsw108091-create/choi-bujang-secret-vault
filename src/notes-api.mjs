@@ -12,6 +12,7 @@
 import { createClient } from '@supabase/supabase-js';
 import config from '../aleph.config.json' with { type: 'json' };
 import { createLoginVerifier } from './verify-login.mjs';
+import { resourceIdOf } from './resources.mjs';
 import { clientIp, findBlock, loadBlockRules } from './xdr-block.mjs';
 import { defaultBlockLookup } from './xdr-store.mjs';
 
@@ -72,7 +73,10 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
         response.setHeader('WWW-Authenticate', 'Bearer');
         return response.status(401).json({ error: 'LOGIN_REQUIRED' });
       }
-      return await handle({ request, response, supabase, userId: login.userId });
+      // 8단계: 로그인을 통과한 요청에 경로로 정한 자원 ID(note:…)를 붙입니다. 판단에는 아직 쓰지 않습니다.
+      const resourceId = resourceIdOf(request.url ?? '');
+      if (resourceId) response.setHeader('X-Resource-Id', resourceId);
+      return await handle({ request, response, supabase, userId: login.userId, resourceId });
     } catch {
       console.error('notes 함수 오류');
       return response.status(500).json({ error: 'NOTES_FUNCTION_ERROR' });

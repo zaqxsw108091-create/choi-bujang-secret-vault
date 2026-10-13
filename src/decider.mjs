@@ -81,7 +81,7 @@ const respond = (request, decision, reasonCode, ruleId = RULE_IDS[0]) => ({
   ruleIds: [ruleId],
 });
 
-export async function decide(request) {
+async function decideRequest(request) {
   // 규칙 device_registered: deviceRegistered 가 정확히 true 일 때만 통과합니다.
   // false, 값 없음, 문자열 'true' 같은 다른 값은 모두 미등록으로 봅니다.
   if (request?.deviceRegistered !== true) {
@@ -94,4 +94,15 @@ export async function decide(request) {
     return respond(request, 'step_up', 'step_up_required', 'step_up_required');
   }
   return respond(request, 'allow', 'approved', zone.ruleId);
+}
+
+// 판정 중 어떤 이유로든 오류가 나면 던지지 않고 거부로 닫습니다(요청 ID를 못 읽으면 빈 값). 응답 모양은 그대로 다섯 항목입니다.
+export async function decide(request) {
+  try {
+    return await decideRequest(request);
+  } catch {
+    let requestId;
+    try { requestId = request?.requestId; } catch { requestId = undefined; }
+    return respond({ requestId }, 'deny', 'route_not_allowed', 'route_unknown');
+  }
 }

@@ -192,3 +192,12 @@ test('step 8: the step-up rule still applies to a known route', async () => {
   const { suspicious } = fixtureRequests();
   assert.equal((await decide(suspicious)).decision, 'step_up');
 });
+
+test('step 8: a request that throws while being read is denied instead of throwing', async () => {
+  const hostile = new Proxy({}, { get() { throw new Error('boom'); } });
+  const out = await decide(hostile);
+  assert.equal(out.decision, 'deny');
+  assert.deepEqual(out.ruleIds, ['route_unknown']);
+  assert.equal(Object.keys(out).sort().join(','), 'decision,reasonCode,requestId,ruleIds,schema');
+  for (const bad of [undefined, null, 0, 'x', [], {}]) assert.equal((await decide(bad)).decision, 'deny');
+});

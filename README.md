@@ -170,7 +170,7 @@
 ### 4단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
 
 - 작동하는 기능: 3단계의 로그인·메모 추가·조회·수정·삭제에 소유자 검사가 더해졌습니다. 로그인한 사용자는 자기 메모만 보고 바꾸며, 남의 메모는 403으로 거부됩니다(없는 id는 404). DB 권한 SQL(`sql/4-notes-rls.sql`의 변경 구역)은 학생이 2026-10-07 실행해 `authenticated`에만 4가지 권한이 남았습니다.
-- 설정 대조(2026-10-07): `aleph.config.json`은 `step` 4, `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소, `judgeIssuer`는 바꾸지 않음, `identityProvider`는 3단계와 같음, `allowedRoutes` 5개는 실제 파일과 일치, `originalApiUrl`은 null(5단계부터). `RULE_IDS`는 `starter.deny` 하나뿐입니다.
+- 설정 대조(2026-10-07): `aleph.config.json`은 `step` 4, `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소, `judgeIssuer`는 바꾸지 않음, `identityProvider`는 3단계와 같음, `allowedRoutes` 5개는 실제 파일과 일치, `originalApiUrl`은 null(5단계부터). (4단계 당시) `RULE_IDS`는 `starter.deny` 하나뿐이었습니다(6단계에서 `device_registered`를 더함).
 - 다시 실행: `npm run test:r5`, `npm run build -- --local`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
 
 ## 5단계: 자료 요청을 서버 한곳으로 모읍니다
@@ -202,7 +202,7 @@
 ### 5단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
 
 - 작동하는 기능: 4단계의 로그인·소유자 검사에 더해, 메모 자료 요청이 서버 함수 한곳으로 모였고 직접 권한을 거두는 SQL을 준비했습니다(SQL은 학생이 2026-10-07 학습 DB에 적용함).
-- 설정 대조(2026-10-07): `step` 5, `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소, `judgeIssuer`는 바꾸지 않음, `identityProvider`는 4단계와 같음, `allowedRoutes` 7개(메모 5개 + 로그인 2개, 2026-10-08 정정: 처음에 5개로 잘못 적었음)는 실제 파일과 일치, `originalApiUrl`은 위 주소. `RULE_IDS`는 `starter.deny` 하나뿐입니다.
+- 설정 대조(2026-10-07): `step` 5, `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소, `judgeIssuer`는 바꾸지 않음, `identityProvider`는 4단계와 같음, `allowedRoutes` 7개(메모 5개 + 로그인 2개, 2026-10-08 정정: 처음에 5개로 잘못 적었음)는 실제 파일과 일치, `originalApiUrl`은 위 주소. (5단계 당시) `RULE_IDS`는 `starter.deny` 하나뿐이었습니다(6단계에서 `device_registered`를 더함).
 - 다시 실행: `npm run test:r5`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
 
 ## 6단계: 등록한 기기만 자료실에 들어옵니다

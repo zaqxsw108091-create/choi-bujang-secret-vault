@@ -21,6 +21,14 @@ const MAX_TITLE = 200;
 const MAX_BODY = 5000;
 
 // 화면과 API가 쓰는 모양은 {id, title, body}입니다. DB 칸 이름은 content이고 owner_id는 내보내지 않습니다.
+// 8단계 제작 3: 거부 사유는 짧은 코드만 서버 로그에 남깁니다. 메모 제목·본문·토큰·사용자 ID는 적지 않습니다.
+const deny = (response, status, error, reason) => {
+  console.warn(`notes 거부: ${reason}`);
+  return response.status(status).json({ error });
+};
+// 저장된 소유자와 서버가 검증한 사용자 ID가 정확히 같을 때만 자기 자료입니다. 요청의 값은 쓰지 않습니다.
+const isOwner = (row, userId) => typeof row?.owner_id === 'string' && row.owner_id === userId;
+
 const toPublic = (row) => ({ id: row.id, title: row.title, body: row.content });
 
 function readNote(raw, { allowId }) {
@@ -71,7 +79,7 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
       if (!login) {
         // 토큰 없음·위조·만료·다른 서비스용은 모두 같은 응답입니다.
         response.setHeader('WWW-Authenticate', 'Bearer');
-        return response.status(401).json({ error: 'LOGIN_REQUIRED' });
+        return deny(response, 401, 'LOGIN_REQUIRED', 'login_required');
       }
       // 8단계: 로그인을 통과한 요청에 경로로 정한 자원 ID(note:…)를 붙입니다. 판단에는 아직 쓰지 않습니다.
       const resourceId = resourceIdOf(request.url ?? '');
@@ -102,7 +110,7 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
     }
     // 목록: 서버가 확인한 사용자 본인의 메모만 돌려줍니다.
     const read = (ordered) => {
-      let query = supabase.from('notes').select('id, title, content').eq('owner_id', userId);
+      let query = supabase.from('notes').select('id, title, content, owner_id').eq('owner_id', userId);
       if (ordered) query = query.order('position', { ascending: true, nullsFirst: false });
       return query.order('created_at', { ascending: true }).order('title', { ascending: true });
     };
@@ -110,7 +118,8 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
     let { data, error } = await read(true);
     if (error?.code === '42703') ({ data, error } = await read(false));
     if (error) return failed(response, error, '목록 읽기');
-    return response.status(200).json(data.map(toPublic));
+    // 질의 조건에 더해, 돌려줄 행의 저장된 소유자를 한 번 더 대조합니다.
+    return response.status(200).json(data.filter(row => isOwner(row, userId)).map(toPublic));
   });
 
   // GET /api/notes/:id, PUT /api/notes/:id, DELETE /api/notes/:id
@@ -121,12 +130,13 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
     const notFound = async () => {
       const { data, error } = await supabase.from('notes').select('id').eq('id', id).maybeSingle();
       if (error) return failed(response, error, '소유자 확인');
-      return data ? response.status(403).json({ error: 'FORBIDDEN' }) : response.status(404).json({ error: 'NOT_FOUND' });
+      return data ? deny(response, 403, 'FORBIDDEN', 'not_owner') : response.status(404).json({ error: 'NOT_FOUND' });
     };
     if (request.method === 'GET') {
-      const { data, error } = await supabase.from('notes').select('id, title, content')
+      const { data, error } = await supabase.from('notes').select('id, title, content, owner_id')
         .eq('id', id).eq('owner_id', userId).maybeSingle();
       if (error) return failed(response, error, '읽기');
+      if (data && !isOwner(data, userId)) return deny(response, 403, 'FORBIDDEN', 'owner_mismatch');
       return data ? response.status(200).json(toPublic(data)) : await notFound();
     }
     if (request.method === 'PUT') {

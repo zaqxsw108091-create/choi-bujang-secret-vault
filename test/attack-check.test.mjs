@@ -53,3 +53,13 @@ test('일부 요청만 접속하지 못하면 된 것은 사실대로, 안 된 �
   assert.equal(observed(results, 'static_marker_absent'), '확인하지 못함 (요청을 보내지 못함)');
   assert.equal(observed(results, 'wrong_password_login_refused'), '확인하지 못함 (요청을 보내지 못함)');
 });
+
+test('8단계 직접 요청 점검: 로그인 없는 role 쿼리와 공지 경로는 거부로 적고, 접속 실패는 지어내지 않는다', async () => {
+  const results = await check();
+  assert.equal(observed(results, 'anon_role_query_refused'), '거부됨 (HTTP 401)');
+  assert.equal(observed(results, 'notice_route_serves_nothing'), '거부됨 (HTTP 401)');
+  assert.match(observed(results, 'other_owner_read_refused'), /^미실행/u);
+  const down = await check({ throwOn: ['ALL'] });
+  assert.match(observed(down, 'anon_role_query_refused'), /^확인하지 못함/u);
+  assert.match(observed(down, 'notice_route_serves_nothing'), /^확인하지 못함/u);
+});

@@ -50,7 +50,10 @@ test('build identity uses Vercel Git and deployment metadata', () => {
   const step7 = deploymentIdentity(env, { ...config, step: 7 });
   assert.equal(step7.step, 7);
   assert.equal('sampleMarker' in step7, false);
-  assert.throws(() => deploymentIdentity(env, { ...config, step: 8 }));
+  const step8 = deploymentIdentity(env, { ...config, step: 8 });
+  assert.equal(step8.step, 8);
+  assert.equal('sampleMarker' in step8, false);
+  assert.throws(() => deploymentIdentity(env, { ...config, step: 9 }));
   assert.throws(() => deploymentIdentity({ ...env, VERCEL_GIT_PROVIDER: undefined }, config));
   assert.throws(() => deploymentIdentity({ ...env, VERCEL_GIT_COMMIT_SHA: 'short' }, config));
 });
@@ -210,8 +213,8 @@ function makeApi({ rows = [], configured = true, leaky = false } = {}) {
   return { rows, list: o => call(api.collection, o), item: o => call(api.item, o) };
 }
 
-test('aleph.config.json is at step 7 and names the login issuer and the seven real API routes', () => {
-  assert.equal(realConfig.step, 7);
+test('aleph.config.json is at step 8 and names the login issuer and the seven real API routes', () => {
+  assert.equal(realConfig.step, 8);
   assert.equal(realConfig.originalApiUrl, 'https://vskaxngivuhucmbnoagz.supabase.co/rest/v1/notes');
   assert.doesNotThrow(() => createLoginVerifier({ config: realConfig,
     supabaseClient: { auth: { getClaims: async () => ({}) } } }));

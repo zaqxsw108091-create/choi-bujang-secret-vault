@@ -227,7 +227,7 @@
 
 ### 6단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
 
-- 작동하는 기능: 5단계까지의 로그인·소유자 검사·서버 한곳 요청 모으기에 더해, `src/decider.mjs`가 `deviceRegistered`가 `true`인 `GET`만 허용하고 미등록·값 없음은 `device_not_registered`로 거부합니다. 자료실 주소와 브라우저 화면은 바꾸지 않았습니다. 이 판정기가 실제 운영 반 엔진에 연결됐는지는 확인하지 못했습니다.
+- 작동하는 기능: 5단계까지의 로그인·소유자 검사·서버 한곳 요청 모으기에 더해, `src/decider.mjs`가 `deviceRegistered`가 `true`인 `GET`만 허용하고 미등록·값 없음은 `device_not_registered`로 거부합니다. 자료실 주소와 브라우저 화면은 바꾸지 않았습니다. 계약 문서(`docs/DECIDER_REQUEST.md`)는 반 엔진이 `src/decider.mjs`의 `decide(request)`를 부른다고 설명합니다. `api/`의 서버 함수는 이 판정기를 부르지 않고(저장소 검색으로 확인), 엔진이 실제로 부르는 모습은 이 저장소에서 확인하지 못했습니다.
 - 설정 대조(2026-10-13): `aleph.config.json`은 `step` 6(빌드·배포 식별·점검 스크립트가 6을 받도록 허용 목록에 6을 더함), `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소, `judgeIssuer`는 바꾸지 않음, `identityProvider`·`allowedRoutes` 7개·`originalApiUrl`은 5단계와 같음. `RULE_IDS`는 실제로 구현한 `starter.deny`(등록 기기의 `GET`이 아닌 요청을 거부하는 기본 규칙), `device_registered` 두 개입니다.
 - `src/attack-check.mjs`는 6단계에서 5단계와 같은 점검을 보냅니다. 판정기 규칙은 배포 서버의 요청 경로에 연결되어 있지 않아 미등록 기기 점검은 **미실행**입니다(미등록 기기 공격은 심판이 맡습니다).
 - 다시 실행: `npm run decider:test`, `npm run test:r5`(처음에는 `npm ci`로 설치), `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).

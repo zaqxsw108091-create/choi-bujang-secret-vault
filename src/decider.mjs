@@ -2,7 +2,7 @@
 // 8단계: 등록 기기라도 알려진 구역 경로만 허용하고, 모르는 경로와 공지 수정은 거부합니다.
 // 6단계: 등록된 기기의 요청만 허용합니다. 7단계: 복합 이상 접속은 추가 확인(step_up)으로 보냅니다. 사용자·역할·위치는 계약에 없는 값이라 읽지 않습니다.
 // 요청 본문의 userId, role, 기기 키, 토큰을 별도로 믿거나 저장하지 마세요.
-import { resourceIdOf } from './resources.mjs';
+import { RESERVED } from './resources.mjs';
 
 // 8단계: 구역 규칙 note_zone_self(자기 구역 메모 경로), notice_zone_staff_only(공지 수정), route_unknown(모르는 경로)을 더했습니다.
 export const RULE_IDS = Object.freeze(['device_registered', 'step_up_required', 'note_zone_self', 'notice_zone_staff_only', 'route_unknown']);
@@ -48,29 +48,33 @@ function needsStepUp(request) {
 // route 와 path 가 서로 맞고(같은 종류, :id 자리에 모양이 맞는 ID) 표에 있는 조합만 압니다. 표에 없으면 모릅니다.
 // 판정기는 자료의 주인을 알 수 없습니다(계약에 자료 소유자·역할 항목이 없음). 남의 메모를 막는 일은 API의 소유자 검사(403)가 합니다.
 // 공지 수정은 강사만 해야 하지만 계약에 강사 역할이 없어, 역할 없이 올 수 있는 요청은 모두 거부합니다.
+// 8단계 심판 지적 반영: 자기 메모는 "한 건 읽기·수정"만 알고, 메모 전체 목록·추가·삭제는 알지 못하는 경로로 거부합니다.
+// 공지·강사 자료에 대한 쓰기(POST·PUT·PATCH·DELETE)는 계약에 역할이 없으므로 누구에게나 거부합니다.
 const ZONES = new Map([
-  ['GET /notes', { kind: 'note', id: false, decision: 'allow', ruleId: 'note_zone_self' }],
-  ['POST /notes', { kind: 'note', id: false, decision: 'allow', ruleId: 'note_zone_self' }],
   ['GET /notes/:id', { kind: 'note', id: true, decision: 'allow', ruleId: 'note_zone_self' }],
   ['PUT /notes/:id', { kind: 'note', id: true, decision: 'allow', ruleId: 'note_zone_self' }],
-  ['DELETE /notes/:id', { kind: 'note', id: true, decision: 'allow', ruleId: 'note_zone_self' }],
+  ['POST /notices', { kind: 'notice', id: false, decision: 'deny', ruleId: 'notice_zone_staff_only' }],
   ['PUT /notices/:id', { kind: 'notice', id: true, decision: 'deny', ruleId: 'notice_zone_staff_only' }],
+  ['PATCH /notices/:id', { kind: 'notice', id: true, decision: 'deny', ruleId: 'notice_zone_staff_only' }],
+  ['DELETE /notices/:id', { kind: 'notice', id: true, decision: 'deny', ruleId: 'notice_zone_staff_only' }],
 ]);
-const noApi = value => (typeof value === 'string' && value.startsWith('/api/') ? value.slice(4) : value);
 const routeKey = route => (typeof route === 'string'
   ? route.replace(/^([A-Z]+) \/api\//u, '$1 /') : null);
+// 경로는 글자 그대로 정확해야 합니다: 맨 앞 '/', 빈 조각(//)·끝 '/'·쿼리·'#'·깊은 경로 없음. 자료 ID는 한 조각(영문·숫자·_·-)이며
+// export 같은 기능 이름은 ID로 읽지 않습니다.
+const PATH = /^(?:\/api)?\/(notes|notices)(?:\/([A-Za-z0-9_-]{1,64}))?$/u;
 
 export function zoneOf(request) {
   const { method, route, path, subjectId, deviceId } = request ?? {};
   if (typeof subjectId !== 'string' || !subjectId || !/^[0-9a-f]{16}$/u.test(deviceId ?? '')) return null;
   const zone = ZONES.get(routeKey(route));
   if (!zone || typeof method !== 'string' || routeKey(route).split(' ')[0] !== method) return null;
-  // 경로는 글자 그대로 정확해야 합니다: 맨 앞 '/', 빈 조각(//)·끝 '/'·쿼리·조각 없음. 모양이 다르면 모르는 경로입니다.
-  if (typeof path !== 'string' || !/^(?:\/api)?\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)?$/u.test(path)) return null;
-  const resource = resourceIdOf(`/api${noApi(path).startsWith('/') ? noApi(path) : `/${noApi(path)}`}`);
-  if (!resource || resource.split(':')[0] !== zone.kind) return null;
-  if ((resource === `${zone.kind}:collection`) === zone.id) return null;
-  return { ...zone, resource };
+  const match = typeof path === 'string' ? PATH.exec(path) : null;
+  if (!match) return null;
+  const [, base, id] = match;
+  if ((base === 'notes' ? 'note' : 'notice') !== zone.kind) return null;
+  if (Boolean(id) !== zone.id || (id && RESERVED.has(id.toLowerCase()))) return null;
+  return { ...zone, resource: id ? `${zone.kind}:${id.toLowerCase()}` : `${zone.kind}:collection` };
 }
 
 const respond = (request, decision, reasonCode, ruleId = RULE_IDS[0]) => ({

@@ -138,15 +138,22 @@ test('re-login sequence (virtual events only): blocked before, new request allow
 const ID = '55555555-5555-4555-8555-555555555555';
 const zoneRequest = (method, route, path, extra = {}) => ({ ...fixtureRequests().normal, requestId: crypto.randomUUID(), method, route, path, ...extra });
 
-test('step 8: own-note read, edit, list, add and delete stay allowed (also with the /api prefix)', async () => {
+test('step 8: own-note read and edit are allowed (any single-piece id, also with the /api prefix); list, add and delete are not', async () => {
   for (const [m, r, p] of [['GET', 'GET /notes/:id', `/notes/${ID}`], ['PUT', 'PUT /notes/:id', `/notes/${ID}`],
-    ['DELETE', 'DELETE /notes/:id', `/notes/${ID}`], ['GET', 'GET /notes', '/notes'], ['POST', 'POST /notes', '/notes'],
+    ['GET', 'GET /notes/:id', '/notes/demo'], ['GET', 'GET /notes/:id', '/notes/own-note_1'],
     ['PUT', 'PUT /api/notes/:id', `/api/notes/${ID}`]]) {
     const req = zoneRequest(m, r, p);
     const out = await decide(req);
     shape(req, out);
     assert.equal(out.decision, 'allow', `${m} ${p}`);
     assert.deepEqual(out.ruleIds, ['note_zone_self']);
+  }
+  for (const [m, r, p] of [['GET', 'GET /notes', '/notes'], ['POST', 'POST /notes', '/notes'], ['DELETE', 'DELETE /notes/:id', `/notes/${ID}`],
+    ['PATCH', 'PATCH /notes/:id', `/notes/${ID}`], ['GET', 'GET /api/notes', '/api/notes']]) {
+    const req = zoneRequest(m, r, p);
+    const out = await decide(req);
+    shape(req, out);
+    assert.equal(out.decision, 'deny', `${m} ${p}`);
   }
 });
 
@@ -156,11 +163,17 @@ test('step 8: a notice edit by an ordinary student is denied, and a request-born
   shape(req, out);
   assert.equal(out.decision, 'deny');
   assert.deepEqual(out.ruleIds, ['notice_zone_staff_only']);
+  for (const [m, r, p] of [['POST', 'POST /notices', '/notices'], ['PUT', 'PUT /notices/:id', '/notices/week-1'],
+    ['PATCH', 'PATCH /notices/:id', '/notices/week-1'], ['DELETE', 'DELETE /notices/:id', '/notices/week-1']]) {
+    const each = await decide(zoneRequest(m, r, p, { role: 'instructor' }));
+    assert.equal(each.decision, 'deny', `${m} ${p}`);
+    assert.deepEqual(each.ruleIds, ['notice_zone_staff_only']);
+  }
 });
 
 test('step 8: unknown routes, mismatched route/path/method, feature paths beside :id and bad ids are denied', async () => {
   const cases = [
-    ['GET', 'GET /notes/:id', '/notes/export'], ['GET', 'GET /notes/:id', '/notes/not-a-uuid'],
+    ['GET', 'GET /notes/:id', '/notes/export'], 
     ['GET', 'GET /notes/:id', `/notes/${ID}/export`], ['GET', 'GET /notes/:id', `/notes/${ID}?x=1`],
     ['GET', 'GET /notes/:id', '/notes'], ['GET', 'GET /notes', `/notes/${ID}`],
     ['POST', 'GET /notes/:id', `/notes/${ID}`], ['GET', 'GET /notices/:id', '/notices/week-1'],
@@ -168,7 +181,7 @@ test('step 8: unknown routes, mismatched route/path/method, feature paths beside
     ['GET', 'GET /other', '/other'],
     ['GET', 'GET /notes/:id', `//notes/${ID}`], ['GET', 'GET /notes/:id', `/notes//${ID}`],
     ['GET', 'GET /notes/:id', `/notes/${ID}/`], ['GET', 'GET /notes/:id', `notes/${ID}`],
-    ['GET', 'GET /notes', '/notes/'], ['GET', 'GET /notes', '/notes#x'], ['GET', undefined, `/notes/${ID}`], [undefined, 'GET /notes', '/notes'],
+    ['GET', 'GET /notes', '/notes/'], ['GET', 'GET /notes', '/notes#x'], ['GET', 'GET /notes/:id', '/notes/export'], ['GET', 'GET /notes/:id', '/notes/a.b'], ['GET', undefined, `/notes/${ID}`], [undefined, 'GET /notes', '/notes'],
   ];
   for (const [m, r, p] of cases) {
     const req = zoneRequest(m, r, p);

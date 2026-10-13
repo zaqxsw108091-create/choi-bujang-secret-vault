@@ -38,3 +38,29 @@ test('the rule reads only deviceRegistered, not role, identity or device fields'
   const request = { ...normal, deviceRegistered: false, role: 'teacher', identity: 'x', device: { approved: true } };
   assert.equal((await decide(request)).decision, 'deny');
 });
+
+test('readSignals keeps the source and never fills a missing value with a normal one', async () => {
+  const { readSignals } = await import('../src/decider.mjs');
+  const { normal } = fixtureRequests();
+  assert.deepEqual(readSignals(normal), { trust: 'fixture', region: 'local', network: 'usual', hour: 14 });
+  const none = { trust: 'none', region: null, network: null, hour: null };
+  assert.deepEqual(readSignals({ signals: { source: 'none', region: 'unknown', network: 'unknown', hour: 0 } }), none);
+  for (const bad of [undefined, null, 'x', []]) assert.deepEqual(readSignals({ signals: bad }), none);
+  assert.equal(readSignals({ signals: {} }).trust, 'unverified');
+  assert.deepEqual(readSignals(undefined), none);
+  const partial = readSignals({ signals: { source: 'judge_fixture', region: 'unknown', hour: 24 } });
+  assert.deepEqual(partial, { trust: 'fixture', region: null, network: null, hour: null });
+});
+
+test('forged client headers or unknown sources are not promoted to trusted signals', async () => {
+  const { readSignals } = await import('../src/decider.mjs');
+  const { normal } = fixtureRequests();
+  const forged = { ...normal, signals: { source: 'none', region: 'unknown', network: 'unknown', hour: 14 },
+    headers: { 'x-forwarded-for': '1.2.3.4', 'x-region': 'local' }, region: 'local', network: 'usual' };
+  assert.equal(readSignals(forged).trust, 'none');
+  assert.equal(readSignals(forged).region, null);
+  for (const source of ['client', 'header', 'browser', 'JUDGE_FIXTURE', undefined, 1]) {
+    const out = readSignals({ signals: { source, region: 'local', network: 'usual', hour: 14 } });
+    assert.deepEqual(out, { trust: 'unverified', region: null, network: null, hour: null });
+  }
+});

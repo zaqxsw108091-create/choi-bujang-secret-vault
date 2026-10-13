@@ -8,6 +8,8 @@ export const RESOURCE_KINDS = Object.freeze({ note: 'note', notice: 'notice' });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const NOTICE_ID = /^[A-Za-z0-9_-]{1,64}$/u;
+// :id 자리에 올 수 없는 이름: 같은 깊이에 기능 경로(export 등)를 두지 않기 위해, 이런 이름은 자료 ID로 읽지 않습니다.
+const RESERVED = new Set(['export', 'import', 'search', 'list', 'all', 'new', 'me', 'admin', 'bulk', 'collection']);
 const BASES = { '/api/notes': { kind: 'note', valid: UUID }, '/api/notices': { kind: 'notice', valid: NOTICE_ID } };
 
 // 경로(쿼리 제외)에서 자원 ID를 만듭니다. 모르는 경로나 모양이 틀린 ID는 null입니다.
@@ -17,7 +19,7 @@ export function resourceIdOf(path) {
   const base = BASES[`/${parts.slice(0, 2).join('/')}`];
   if (!base || parts.length > 3) return null;
   if (parts.length === 2) return `${base.kind}:collection`;
-  return base.valid.test(parts[2]) ? `${base.kind}:${parts[2].toLowerCase()}` : null;
+  return base.valid.test(parts[2]) && !RESERVED.has(parts[2].toLowerCase()) ? `${base.kind}:${parts[2].toLowerCase()}` : null;
 }
 
 export const resourceKindOf = (resourceId) =>

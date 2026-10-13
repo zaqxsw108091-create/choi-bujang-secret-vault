@@ -246,6 +246,29 @@
 | 코딩 도구에서 배포 주소 접속 | `npm run bundle`의 직접 점검 | 외부 접속이 막혀 12개가 `확인하지 못함`, 남의 메모 3개는 미실행 | **미확보** |
 | 심판 판정, 포털 점수, 반 엔진의 판정기 호출 | 포털·심판 | 코딩 도구는 볼 수 없음 | 확인하지 못함 |
 
+## 7단계: 평소와 다른 접속은 다시 확인합니다
+
+`src/decider.mjs`에 입력 검사 `readSignals`와 규칙 `step_up_required`를 더했습니다. `RULE_IDS`는 실제로 구현한 `device_registered`, `step_up_required` 두 개입니다. 계약에 있는 `request.signals`, `request.recentEvents`, `request.stepUp`만 읽습니다([`docs/DECIDER_REQUEST.md`](docs/DECIDER_REQUEST.md)).
+
+- 입력 검사: `signals.source`가 `none`이면 출처 없음, `judge_fixture`면 심판 가상 요청(실제 접속 증거 아님), 그 밖은 출처 불명확입니다. 지역·네트워크·시각 값은 가상 요청일 때만 읽고, 없거나 `unknown`이거나 형식·범위가 틀리면 `null`로 둡니다. 정상값으로 채우지 않습니다. 헤더나 최상위 `region`·`network` 같은 값은 읽지 않으므로 위조한 값이 신뢰하는 접속 정보로 올라가지 않습니다.
+- 규칙: 밤 0~5시, 처음 보는 네트워크(`unusual`), 최근 사건의 `risk_signal` 합계 20건 이상이 **모두** 참일 때 `step_up`과 이유 코드 `step_up_required`를 돌려줍니다. 기준값(0~5시, 20건)은 연습용 가상 요청에 맞춘 값이며 계약에 정해진 숫자가 아닙니다. 하나라도 빠지면 허용합니다. 지역은 조건이 아니라서 지역 하나만으로는 막거나 추가 확인을 하지 않고, 이 규칙은 `deny`를 쓰지 않습니다(영구 차단 없음).
+- 추가 확인을 마친 요청(`stepUp.verified`가 `true`이고 나이가 0~900초 정수)은 허용하고, 901초·값 없음·형식 오류는 다시 `step_up`입니다. 판정은 요청마다 따로 나옵니다.
+- 기기 규칙이 먼저입니다. 미등록 기기는 그대로 `device_not_registered`로 거부됩니다.
+
+### 7단계 확인 순서
+
+1. `npm run decider:test`를 실행합니다. `통과` 네 줄(등록 기기의 정상 요청, 미등록 기기, 복합 이상 접속, 다시 확인한 복합 이상 접속)이 나와야 합니다.
+2. `npm run fixture:7`을 실행합니다. `정상 사건: allow`, `복합 이상 사건: step_up`이 나와야 합니다.
+3. `node --test test/*.mjs`를 실행합니다(처음에는 `npm ci`).
+
+### 7단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
+
+- 작동하는 기능: 6단계까지에 더해, 판정기가 정상 가상 사건은 `allow`, 시각·네트워크·읽기 급증이 겹친 복합 가상 사건은 `step_up`으로 다르게 판정합니다. 자료실 주소와 브라우저 화면은 바꾸지 않았습니다.
+- **미실행·한계**: 반 엔진이 같은 내 로그인의 재로그인 시각을 확인해 `stepUp`에 넣는 계약은 이 저장소에서 찾지 못했습니다. `api/`의 서버 함수는 판정기를 부르지 않으므로 "추가 확인 전 실제 자료 차단"과 "새 로그인 뒤 실제 요청 허용"은 **미실행**입니다. 현재 실제 경로의 `signals`는 `source: "none"`이라 이 규칙이 실제 접속에는 걸리지 않습니다. 위 확인은 가상 요청 연습이며 심판 판정, 포털 점수, 반 엔진의 판정기 호출은 확인하지 못했습니다.
+- 설정 대조(2026-10-13): `aleph.config.json`은 `step` 7(빌드·배포 식별·점검 스크립트의 허용 목록에 7을 더함), `repoUrl`·`publicAppUrl`·`judgeIssuer`·`identityProvider`·`allowedRoutes` 7개·`originalApiUrl`은 6단계와 같음. `RULE_IDS`는 구현한 두 규칙만입니다.
+- `src/attack-check.mjs`는 7단계에서 6단계와 같은 점검을 보냅니다. 판정기 규칙은 배포 서버 경로에 연결돼 있지 않아 추가 확인 점검은 **미실행**입니다.
+- 다시 실행: `npm run decider:test`, `npm run fixture:7`, `node --test test/*.mjs`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
+
 ## 다음 단계의 코딩 도구에 전달할 규칙
 
 [AGENTS.md](AGENTS.md)를 먼저 읽히고 한 번에 한 제작 단위만 요청하세요. 2단계부터는 자료 보호를 구현할 때 `public/data.json`을 복사하는 1단계 빌드 흐름도 함께 바꿔야 합니다. 3단계 이후의 로그인, 허용 경로, 5단계의 원본 API 주소, 6단계 이후 정책 규칙은 해당 단계 원고와 계약에 맞춰 추가합니다. 비밀번호·토큰·서버 전용 키·실제 학생 기록을 코드, Git, 제출 묶음에 넣지 않습니다.

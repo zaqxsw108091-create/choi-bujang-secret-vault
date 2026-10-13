@@ -225,6 +225,14 @@
 - 실행 결과(실행함, 2026-10-13): 위 두 줄이 모두 `통과`였고, 같은 가상 요청의 판정은 등록 `allow`·`approved`, 미등록 `deny`·`device_not_registered`였습니다.
 - 한계: 이 시험은 가상 요청 연습입니다. 실제 미등록 기기로 들어오는 공격 시험과 판정은 심판이 맡으며, 심판 판정이나 반 엔진 연결은 확인하지 못했습니다. 배포·포털 점수도 확인하지 못했습니다.
 
+### 6단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
+
+- 작동하는 기능: 5단계까지의 로그인·소유자 검사·서버 한곳 요청 모으기에 더해, `src/decider.mjs`가 `deviceRegistered`가 `true`인 `GET`만 허용하고 미등록·값 없음은 `device_not_registered`로 거부합니다. 자료실 주소와 브라우저 화면은 바꾸지 않았습니다. 이 판정기가 실제 운영 반 엔진에 연결됐는지는 확인하지 못했습니다.
+- 설정 대조(2026-10-13): `aleph.config.json`은 `step` 6(빌드·배포 식별·점검 스크립트가 6을 받도록 허용 목록에 6을 더함), `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소, `judgeIssuer`는 바꾸지 않음, `identityProvider`·`allowedRoutes` 7개·`originalApiUrl`은 5단계와 같음. `RULE_IDS`는 실제로 구현한 `starter.deny`(등록 기기의 `GET`이 아닌 요청을 거부하는 기본 규칙), `device_registered` 두 개입니다.
+- `src/attack-check.mjs`는 6단계에서 5단계와 같은 점검을 보냅니다. 판정기 규칙은 배포 서버의 요청 경로에 연결되어 있지 않아 미등록 기기 점검은 **미실행**입니다(미등록 기기 공격은 심판이 맡습니다).
+- 다시 실행: `npm run decider:test`, `npm run test:r5`(처음에는 `npm ci`로 설치), `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
+- 확인(실행함, 2026-10-13): `npm run decider:test` 두 줄 `통과`, `npm run test:r5` 25건 통과, `npm run build -- --local` 통과(Vercel 배포는 확인하지 못함).
+
 ## 다음 단계의 코딩 도구에 전달할 규칙
 
 [AGENTS.md](AGENTS.md)를 먼저 읽히고 한 번에 한 제작 단위만 요청하세요. 2단계부터는 자료 보호를 구현할 때 `public/data.json`을 복사하는 1단계 빌드 흐름도 함께 바꿔야 합니다. 3단계 이후의 로그인, 허용 경로, 5단계의 원본 API 주소, 6단계 이후 정책 규칙은 해당 단계 원고와 계약에 맞춰 추가합니다. 비밀번호·토큰·서버 전용 키·실제 학생 기록을 코드, Git, 제출 묶음에 넣지 않습니다.

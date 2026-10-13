@@ -118,3 +118,18 @@ test('step_up_required: the device rule still comes first', async () => {
   assert.equal(out.decision, 'deny');
   assert.equal(out.reasonCode, 'device_not_registered');
 });
+
+test('re-login sequence (virtual events only): blocked before, new request allowed after, nothing echoed', async () => {
+  const { suspicious } = fixtureRequests();
+  const before = await decide(suspicious);
+  assert.equal(before.decision, 'step_up');
+  // 새 로그인 뒤의 요청은 새 requestId·새 stepUp 값으로 도착하고, 이전 판정에 기대지 않고 다시 판정됩니다.
+  const after = { ...suspicious, requestId: '11111111-1111-4111-8111-111111111111',
+    stepUp: { verified: true, authAgeSeconds: 5 }, token: 'TOKEN_SHOULD_NOT_APPEAR' };
+  const out = await decide(after);
+  shape(after, out);
+  assert.equal(out.decision, 'allow');
+  assert.equal(JSON.stringify(out).includes('TOKEN_SHOULD_NOT_APPEAR'), false);
+  // 같은 새 로그인 값이어도 이전 요청은 그대로 추가 확인입니다(판정은 요청마다 따로).
+  assert.equal((await decide(suspicious)).decision, 'step_up');
+});

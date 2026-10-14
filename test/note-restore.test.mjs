@@ -72,7 +72,7 @@ test('B가 변조한 자기 메모 한 건이 사본으로 되돌아오고 ID·�
   const others = JSON.stringify(only(db, [A_NOTE, B_OTHER]));
   const result = await apiFor(db)({ authorization: bearer(B), body: { id: B_NOTE } });
   assert.equal(result.status, 200);
-  const { policy, audit, auditRecorded, scope, auditId, restoredAt, ...rest } = result.body;
+  const { policy, audit, auditRecorded, scope, auditId, restoredAt, auditLog, audit_id, restored_at, auditPreserved, ...rest } = result.body;
   assert.deepEqual([audit.recorded, audit.priorEntries, audit.entries, audit.preserved, auditRecorded], [true, 1, 3, true, true], '이전 기록 1줄은 그대로, 요청·결과 2줄이 덧붙음');
   assert.deepEqual(audit.events, ['older_entry', 'requested', 'updated']);
   assert.equal(policy.verified, true, '정책 사본 검증 결과가 함께 옴');

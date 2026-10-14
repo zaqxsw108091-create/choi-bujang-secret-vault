@@ -331,6 +331,13 @@
 
 ## 10단계 제작 3: 비공개 사본에서 메모 한 건만 되살립니다
 
+**감사 기록 요약 (10단계)**
+- 복구 경로: `aleph.config.json`의 `restoreRoute` = `POST /api/restore`(로그인 필요, 지정한 메모 한 건만).
+- 감사 기록은 덧붙이기만 합니다: 메모 복구는 `notes_restore_audit`(수정·삭제 불가 트리거), 정책 복구는 `policy/restore-audit.jsonl`(한 줄씩 덧붙임). 앞 기록을 쓰지 못하면 메모를 바꾸지 않습니다.
+- 지정한 한 건 밖은 바꾸지 않습니다: 다른 메모, 다른 서비스 규칙(`allowedRoutes`·로그인 발급자·보안 헤더·`judgeIssuer`), 이전 감사 기록은 읽기만 하고 쓰지 않습니다.
+- 복구 응답이 보여 주는 증거: `audit`(`recorded`·`priorEntries`·`entries`·`preserved`·`entry`), `scope`(바뀐 메모 최대 1건, 다른 메모·규칙·감사 행 변경 0), `policy.preserved`.
+- 재시험 순서와 정상·금지 요청: 아래 「10단계 제작 4」.
+
 `aleph.config.json`의 `restoreRoute`는 `POST /api/restore`입니다(`step`은 10단계 저장점에서 10으로 올렸습니다). `allowedRoutes` 7개는 그대로이며, 복구 경로는 일부러 넣지 않았습니다. 정책 사본(`policy/policy-snapshot.json`)과 `npm run policy:restore`가 이 경로를 지우지 않게 하기 위해서입니다.
 
 - **서비스**: Vercel 서버 함수 `api/restore.js`(처리는 `src/notes-api.mjs`의 `restore`와 `src/note-restore.mjs`). 데이터는 학습용 Supabase의 비공개 표 두 개에 있습니다: `notes_backup`(검증한 가상 메모 사본)과 `notes_restore_audit`(덧붙이기만 하는 복구 감사 기록). 두 표 모두 RLS를 켜고 anon·authenticated 권한을 회수했으며, 서버 전용 키를 쓰는 서버 함수만 접근합니다.
@@ -453,3 +460,6 @@
 
 ### 10단계 감사 기록 상세 (일곱 번째 제출 전)
 여섯 번째 제출(커밋 `599e4e8`)에서도 `S10_AUDIT_DROPPED`가 실패했습니다. 복구 응답에 `audit.entry`(`auditId`, `noteId`, `actor: "owner"`, `at`, `event`, `restoreVersion`)와 최상위 `auditId`·`restoredAt`을 추가해 이번 복구가 남긴 기록이 누구(소유자 본인)·언제·어떤 메모·어떤 결과인지 보이게 했습니다. 사용자 ID와 메모 내용은 싣지 않습니다. 이것도 추측이며 제출 결과로만 확인됩니다.
+
+### 10단계 일곱 번째 제출 뒤 (커밋 `722596e`)
+같은 커밋으로 두 번 제출해 첫 결과는 「확인하지 못했습니다」(`UNV_AMBIGUOUS`, 실패로 세지 않음), 둘째 결과는 `S10_AUDIT_DROPPED`였습니다. 안내문이 심판이 README.md와 `restoreRoute`를 읽는다고 해서, 10단계 맨 위에 감사 기록 요약을 두고 복구 응답에 같은 사실의 별칭 필드(`auditLog`, `audit_id`, `restored_at`, `auditPreserved`)를 더했습니다. 새 정보는 없고, 이것도 추측이며 제출 결과로만 확인됩니다.

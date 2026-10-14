@@ -86,3 +86,32 @@ export async function restoreOneNote({ supabase, userId, id }) {
   if (last.error) return { status: 500, body: { error: 'RESTORE_AUDIT_FAILED' }, failure: `감사 기록:${last.error.code ?? 'unknown'}` };
   return { status: 200, body: { id, restored: action !== 'unchanged', action, contentSha256: wanted, verified: true } };
 }
+
+// 자동 사본: 메모를 만들 때, 그리고 사본이 없는 메모를 처음 고치거나 지울 때 "바뀌기 직전의 원래 상태"를 notes_backup에 저장합니다.
+// - 이미 사본이 있으면 덮어쓰지 않습니다(ON CONFLICT DO NOTHING). 그래서 나중에 변조돼도 사본은 침해 전 상태 그대로입니다.
+// - 사본 저장이 실패해도 정상 메모 작업은 막지 않습니다(사유 코드만 로그에 남기고, 제목·본문·사용자 ID는 적지 않음).
+// - 서버가 확인한 소유자의 행만 저장합니다. 요청 본문의 값은 쓰지 않습니다.
+export async function keepBackup(supabase, row) {
+  try {
+    if (!row || !UUID.test(row.id ?? '') || !UUID.test(row.owner_id ?? '') || !textOf(row)) return;
+    const { error } = await supabase.from('notes_backup').upsert({
+      note_id: row.id.toLowerCase(), owner_id: row.owner_id, position: Number.isInteger(row.position) ? row.position : null,
+      title: row.title, content: row.content, content_sha256: noteContentHash(row.title, row.content),
+    }, { onConflict: 'note_id', ignoreDuplicates: true });
+    if (error) console.warn(`notes 사본 저장 실패 ${error.code ?? 'unknown'}`);
+  } catch {
+    console.warn('notes 사본 저장 실패');
+  }
+}
+
+// 고치거나 지우기 전에 본인 소유 행을 한 번 읽어, 사본이 없으면 그 상태를 저장합니다.
+export async function backupBeforeChange(supabase, id, userId) {
+  try {
+    const { data, error } = await supabase.from('notes').select('id, owner_id, title, content, position')
+      .eq('id', id).eq('owner_id', userId).maybeSingle();
+    if (error || !data || data.owner_id !== userId) return;
+    await keepBackup(supabase, data);
+  } catch {
+    console.warn('notes 사본 저장 실패');
+  }
+}

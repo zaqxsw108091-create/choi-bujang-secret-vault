@@ -16,6 +16,7 @@ import { resourceIdOf } from './resources.mjs';
 import { clientIp, findBlock, loadBlockRules } from './xdr-block.mjs';
 import { defaultBlockLookup } from './xdr-store.mjs';
 import { backupBeforeChange, bodyKeys, keepBackup, readRestoreRequest, restoreOneNote } from './note-restore.mjs';
+import { policyPlan } from './policy-plan.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const MAX_TITLE = 200;
@@ -53,7 +54,7 @@ function idFromRequest(request) {
   try { return new URL(request.url, 'http://local').pathname.split('/').filter(Boolean).pop() ?? null; } catch { return null; }
 }
 
-export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () => [], lookupBlock = async () => null, now = () => Date.now() }) {
+export function createNotesApi({ getVerifier, getSupabase, getPolicyPlan = policyPlan, getBlockRules = () => [], lookupBlock = async () => null, now = () => Date.now() }) {
   // 모든 요청의 공통 앞부분: 허용 방법 → 서버 설정 → 로그인 확인. 통과한 요청만 handle로 갑니다.
   const guarded = (allowed, handle) => async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
@@ -173,7 +174,14 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
       if (typeof fromUrl === 'string' && UUID.test(fromUrl)) parsed = { id: fromUrl.toLowerCase(), dryRun: false, expectHash: null, expectOwner: null };
     }
     if (!parsed) return response.status(400).json({ error: 'INVALID_BODY' });
+    // 정책 사본도 실행 전에 검증합니다. 사본이 없거나 검증에 실패하면 아무것도 복원하지 않고 멈춥니다(읽기 전용, 운영 정책은 건드리지 않음).
+    const policy = getPolicyPlan();
+    if (!policy.ok) {
+      console.warn('notes 거부: policy_snapshot_invalid');
+      return response.status(409).json({ error: 'BACKUP_INVALID' });
+    }
     const result = await restoreOneNote({ supabase, userId, id: parsed.id, expect: parsed });
+    if (result.status === 200) result.body = { ...result.body, policy: policy.body };
     if (result.failure) console.error(`notes 복구 실패 ${result.failure}`);
     else if (result.reason) console.warn(`notes 거부: ${result.reason}`);
     return response.status(result.status).json(result.body);

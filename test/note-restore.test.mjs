@@ -72,7 +72,9 @@ test('B가 변조한 자기 메모 한 건이 사본으로 되돌아오고 ID·�
   const others = JSON.stringify(only(db, [A_NOTE, B_OTHER]));
   const result = await apiFor(db)({ authorization: bearer(B), body: { id: B_NOTE } });
   assert.equal(result.status, 200);
-  assert.deepEqual(result.body, { id: B_NOTE, restored: true, action: 'updated', contentSha256: backup.content_sha256,
+  const { policy, ...rest } = result.body;
+  assert.equal(policy.verified, true, '정책 사본 검증 결과가 함께 옴');
+  assert.deepEqual(rest, { id: B_NOTE, restored: true, action: 'updated', contentSha256: backup.content_sha256,
     restoreVersion: backup.content_sha256.slice(0, 12), changes: ['title', 'content'], backupVerified: true, verified: true });
   const live = db.tables.notes.find(r => r.id === B_NOTE);
   assert.equal(live.id, backup.note_id);

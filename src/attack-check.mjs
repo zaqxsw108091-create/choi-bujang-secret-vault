@@ -1,7 +1,7 @@
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
   try {
     app = new URL(config.publicAppUrl);
@@ -14,7 +14,7 @@ export async function runAttackChecks(config) {
   }
   if (typeof config.sampleMarker !== 'string' || !config.sampleMarker) throw new Error('가상 메모의 확인 표시를 넣어 주세요.');
   const get = (path) => fetch(new URL(path, app), { redirect: 'error', signal: AbortSignal.timeout(10000) });
-  if (config.step >= 4 && config.step <= 10) return runStep4Checks(fetch, app, config);
+  if (config.step >= 4 && config.step <= 11) return runStep4Checks(fetch, app, config);
   if (config.step === 3) return runStep3Checks(fetch, app, config.sampleMarker);
   if (config.step === 2) return runStep2Checks(get, config.sampleMarker);
   const response = await get('/data.json');
@@ -230,6 +230,7 @@ async function runStep4Checks(doFetch, app, config) {
   }
   if (config.step >= 8) results.push(...await runStep8Checks(doFetch, app));
   if (config.step >= 10) results.push(...await runStep10Checks(doFetch, app));
+  if (config.step >= 11) results.push(...await runStep11Checks(doFetch, app));
   results.push(...await runCrossOwnerChecks(doFetch, app, config.step));
   return results;
 }
@@ -309,6 +310,33 @@ async function runStep10Checks(doFetch, app) {
     const response = await doFetch(new URL('/api/restore', app), { method: 'POST', redirect: 'error',
       signal: AbortSignal.timeout(10000), headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: '00000000-0000-4000-8000-000000000000' }) });
+    let code = null;
+    let appJson = false;
+    try {
+      const data = JSON.parse(await response.text());
+      appJson = data !== null && typeof data === 'object';
+      if (typeof data?.error === 'string') code = data.error;
+    } catch { /* JSON이 아니면 앱의 응답으로 보지 않습니다. */ }
+    return [{ attackId, expected,
+      observed: response.status === 401 && code === 'LOGIN_REQUIRED' ? '거부됨 (HTTP 401)'
+        : response.ok || appJson ? `거부되지 않음 또는 예상 밖 응답 (HTTP ${response.status})`
+          : `확인하지 못함 (HTTP ${response.status}, 앱의 응답으로 보이지 않음)` }];
+  } catch {
+    return [{ attackId, expected, observed: '확인하지 못함 (요청을 보내지 못함)' }];
+  }
+}
+
+// 11단계: 로그인 없이 기기 승인 요청 경로에 보냅니다. 본문에 status: approved를 실어도 로그인이 없으면 401로 거부되어
+// 기기 행이 만들어지지 않아야 합니다(공개키는 모양만 맞춘 가짜 값이라 개인키가 아닙니다). 상태 번호만 기록하고, 심판의 판정이 아닙니다.
+// 기기 서명 없는 로그인 요청과 승인 전 기기의 거부는 로그인 토큰이 필요해 이 자동 점검에 넣지 않았고, 시험(test/device-gate.test.mjs)과 학생의 화면 확인으로 남깁니다.
+async function runStep11Checks(doFetch, app) {
+  const attackId = 'anonymous_device_approval_refused';
+  const expected = '로그인 없는 POST /api/device가 거부됨(본문에 status: approved를 실어도 승인되지 않음)';
+  try {
+    const fake = 'A'.repeat(43);
+    const response = await doFetch(new URL('/api/device', app), { method: 'POST', redirect: 'error',
+      signal: AbortSignal.timeout(10000), headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicKey: { kty: 'EC', crv: 'P-256', x: fake, y: fake }, status: 'approved' }) });
     let code = null;
     let appJson = false;
     try {

@@ -112,10 +112,13 @@ test('감사 기록은 앞 기록을 그대로 두고 두 줄(요청·결과)만
   assert.ok(!JSON.stringify(audit).match(/변조|본문|title|content"/u));
 });
 
-test('요청 본문의 owner_id·title·content는 읽지 않고 사본 값으로만 되살린다', async () => {
+test('요청 본문의 title·content는 읽지 않고 사본 값으로만 되살리고, 사본 소유자와 다른 owner_id가 실려 오면 멈춘다', async () => {
   const db = world();
   Object.assign(db.tables.notes.find(r => r.id === B_NOTE), { content: '변조' });
-  const result = await apiFor(db)({ authorization: bearer(B), body: JSON.stringify({ id: B_NOTE, owner_id: A, userId: A, role: 'admin', title: '주입', content: '주입 본문' }) });
+  const wrong = await apiFor(db)({ authorization: bearer(B), body: JSON.stringify({ id: B_NOTE, owner_id: A, userId: A, role: 'admin', title: '주입', content: '주입 본문' }) });
+  assert.deepEqual([wrong.status, wrong.body], [409, { error: 'BACKUP_INVALID' }]);
+  assert.equal(db.tables.notes.find(r => r.id === B_NOTE).content, '변조', '아무것도 바뀌지 않음');
+  const result = await apiFor(db)({ authorization: bearer(B), body: JSON.stringify({ id: B_NOTE, userId: A, role: 'admin', title: '주입', content: '주입 본문' }) });
   assert.equal(result.status, 200);
   const live = db.tables.notes.find(r => r.id === B_NOTE);
   assert.deepEqual([live.owner_id, live.title, live.content], [B, 'B의 가상 메모', 'B 본문 가상']);

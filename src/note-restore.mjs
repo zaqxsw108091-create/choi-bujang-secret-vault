@@ -14,6 +14,38 @@ const SHA256 = /^[a-f0-9]{64}$/u;
 export const noteContentHash = (title, content) => createHash('sha256')
   .update(`${Buffer.byteLength(title, 'utf8')}:${title}${Buffer.byteLength(content, 'utf8')}:${content}`, 'utf8').digest('hex');
 
+// 요청의 선택 검증 값: 해시·소유자가 실려 오면 사본과 대조하고 하나라도 틀리면 멈춥니다. 권한으로는 쓰지 않습니다(소유자는 항상 서버가 확인한 로그인).
+const ID_KEYS = ['id', 'noteId', 'note_id'];
+const HASH_KEYS = ['contentSha256', 'content_sha256', 'contentHash', 'content_hash', 'sha256', 'hash', 'backupSha256', 'backupHash'];
+const OWNER_KEYS = ['ownerId', 'owner_id', 'owner'];
+const parseBody = (raw) => {
+  let data = raw;
+  if (typeof data === 'string') { try { data = JSON.parse(data); } catch { return null; } }
+  return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+};
+// 로그용: 필드 이름만(값은 읽지 않음). 모양이 이상한 이름은 버립니다.
+export function bodyKeys(raw) {
+  const data = parseBody(raw);
+  return data ? Object.keys(data).filter(key => /^[A-Za-z0-9_.-]{1,40}$/u.test(key)).slice(0, 12) : [];
+}
+export function readRestoreRequest(raw) {
+  const data = parseBody(raw);
+  if (!data) return null;
+  const idKey = ID_KEYS.find(key => data[key] !== undefined);
+  const id = typeof data[idKey] === 'string' && UUID.test(data[idKey]) ? data[idKey].toLowerCase() : null;
+  if (!id) return null;
+  const present = (keys) => keys.filter(key => data[key] !== undefined && data[key] !== null);
+  const hashes = present(HASH_KEYS).map(key => data[key]);
+  const owners = present(OWNER_KEYS).map(key => data[key]);
+  // 해시: "sha256:" 머리말과 공백, 대소문자는 무시하고 비교합니다. 문자열이 아니거나 사본과 다르면(모양이 틀려도) 불일치입니다.
+  // 소유자: UUID 모양인 값만 대조합니다(모양이 다른 표시는 소유자 값으로 보지 않고 무시). 어느 쪽도 권한으로는 쓰지 않습니다.
+  const normalizeHash = (v) => (typeof v === 'string' ? v.trim().replace(/^sha256[:=]/iu, '').toLowerCase() : false);
+  const ownerList = owners.filter(v => typeof v === 'string' && UUID.test(v.trim())).map(v => v.trim().toLowerCase());
+  return { id,
+    expectHash: hashes.length ? hashes.map(normalizeHash) : null,
+    expectOwner: ownerList.length ? ownerList : null };
+}
+
 export function readRestoreId(raw) {
   let data = raw;
   if (typeof data === 'string') { try { data = JSON.parse(data); } catch { return null; } }
@@ -25,7 +57,7 @@ const fail = (status, error, reason) => ({ status, body: { error }, reason });
 const dbFailure = (label, error) => ({ status: 502, body: { error: 'NOTES_REQUEST_FAILED' }, failure: `${label}:${error?.code ?? 'unknown'}` });
 const textOf = row => typeof row?.title === 'string' && typeof row?.content === 'string';
 
-export async function restoreOneNote({ supabase, userId, id }) {
+export async function restoreOneNote({ supabase, userId, id, expect = {} }) {
   const audit = async (event, contentSha256 = null) => supabase.from('notes_restore_audit')
     .insert({ note_id: id, actor_id: userId, event, content_sha256: contentSha256 });
 
@@ -45,6 +77,9 @@ export async function restoreOneNote({ supabase, userId, id }) {
     return fail(409, 'BACKUP_INVALID', 'backup_integrity');
   }
   const wanted = backup.content_sha256;
+  // 2-1) 요청에 실려 온 해시·소유자는 사본과 같아야 합니다. 하나라도 틀리거나 모양이 틀리면 아무것도 바꾸지 않고 멈춥니다.
+  if (expect.expectHash && !expect.expectHash.every(value => value === wanted)) return fail(409, 'BACKUP_INVALID', 'request_hash_mismatch');
+  if (expect.expectOwner && !expect.expectOwner.every(value => value === String(backup.owner_id).toLowerCase())) return fail(409, 'BACKUP_INVALID', 'request_owner_mismatch');
 
   // 3) 앞 감사 기록. 쓰지 못하면 메모를 바꾸지 않습니다.
   const first = await audit('requested', wanted);

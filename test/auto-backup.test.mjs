@@ -59,6 +59,7 @@ function api(db) {
     edit: (user, id, body) => call(handlers.item, { method: 'PUT', authorization: bearer(user), id, body, url: `/api/notes/${id}` }),
     remove: (user, id) => call(handlers.item, { method: 'DELETE', authorization: bearer(user), id, url: `/api/notes/${id}` }),
     restore: (user, id) => call(handlers.restore, { method: 'POST', authorization: bearer(user), body: { id }, url: '/api/restore' }),
+    restoreWith: (user, body) => call(handlers.restore, { method: 'POST', authorization: bearer(user), body, url: '/api/restore' }),
   };
 }
 const liveOf = (db, id) => db.tables.notes.find(r => r.id === id);
@@ -150,4 +151,67 @@ test('요청 본문의 owner_id·id 같은 값은 사본에 쓰지 않는다', a
   const created = await a.create(B, { title: '제목', body: '본문', owner_id: A, userId: A });
   assert.equal(created.status, 201);
   assert.equal(db.tables.notes_backup[0].owner_id, B);
+});
+
+async function tampered() {
+  const db = world(); const a = api(db);
+  const id = (await a.create(B, { title: '원래 제목', body: '원래 본문' })).body.id;
+  await a.edit(B, id, { title: '변조됨', body: '변조 본문' });
+  return { db, a, id, hash: noteContentHash('원래 제목', '원래 본문') };
+}
+
+test('요청에 실린 해시가 사본과 다르면 복원하지 않고 409로 멈춘다(메모·감사 기록 그대로)', async () => {
+  const { db, a, id } = await tampered();
+  const before = JSON.stringify(db.tables);
+  for (const bad of ['f'.repeat(64), '0'.repeat(64), 'tampered', 12345, noteContentHash('변조됨', '변조 본문')]) {
+    const result = await a.restoreWith(B, { id, contentSha256: bad });
+    assert.deepEqual([result.status, result.body], [409, { error: 'BACKUP_INVALID' }], String(bad));
+  }
+  assert.equal(JSON.stringify(db.tables), before);
+});
+
+test('해시가 사본과 같으면(대문자·sha256: 머리말 포함) 복원한다', async () => {
+  for (const make of [h => h, h => h.toUpperCase(), h => `sha256:${h}`]) {
+    const { db, a, id, hash } = await tampered();
+    const result = await a.restoreWith(B, { id, sha256: make(hash) });
+    assert.deepEqual([result.status, result.body.verified], [200, true]);
+    assert.equal(liveOf(db, id).title, '원래 제목');
+  }
+});
+
+test('사본 소유자와 다른 UUID owner가 실려 오면 멈추고, 같은 owner·모양이 다른 표시는 통과한다', async () => {
+  const { db, a, id } = await tampered();
+  assert.equal((await a.restoreWith(B, { id, ownerId: A })).status, 409);
+  assert.equal(liveOf(db, id).title, '변조됨');
+  assert.equal((await a.restoreWith(B, { id, owner: 'b' })).status, 200);
+  const second = await tampered();
+  assert.equal((await second.a.restoreWith(B, { id: second.id, owner_id: B, contentHash: second.hash })).status, 200);
+});
+
+test('id는 noteId·note_id로 와도 읽고, 없거나 UUID가 아니면 400이다', async () => {
+  for (const key of ['noteId', 'note_id']) {
+    const { a, id } = await tampered();
+    assert.equal((await a.restoreWith(B, { [key]: id })).status, 200, key);
+  }
+  const { a } = await tampered();
+  for (const body of [{}, { noteId: 'abc' }, { hash: 'x' }]) assert.equal((await a.restoreWith(B, body)).status, 400);
+});
+
+test('요청에 실린 owner는 권한이 되지 않는다: A가 B의 사본을 B의 해시·owner와 함께 보내도 403', async () => {
+  const { db, a, id, hash } = await tampered();
+  const before = JSON.stringify(db.tables);
+  const result = await a.restoreWith(A, { id, ownerId: B, contentSha256: hash });
+  assert.deepEqual([result.status, result.body], [403, { error: 'FORBIDDEN' }]);
+  assert.equal(JSON.stringify(db.tables), before);
+});
+
+test('로그에는 요청의 필드 이름만 남고 값(id·해시·소유자)은 없다', async () => {
+  const lines = []; const info = console.info; console.info = (...x) => lines.push(x.join(' '));
+  try {
+    const { a, id, hash } = await tampered();
+    await a.restoreWith(B, { id, contentSha256: hash, ownerId: B });
+  } finally { console.info = info; }
+  const text = lines.join('\n');
+  assert.match(text, /notes 복구 요청 필드: id,contentSha256,ownerId/u);
+  assert.ok(!text.includes(B) && !text.includes('2222') && !/[a-f0-9]{16}/u.test(text));
 });

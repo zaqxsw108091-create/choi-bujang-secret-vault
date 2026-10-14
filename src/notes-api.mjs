@@ -15,7 +15,7 @@ import { createLoginVerifier } from './verify-login.mjs';
 import { resourceIdOf } from './resources.mjs';
 import { clientIp, findBlock, loadBlockRules } from './xdr-block.mjs';
 import { defaultBlockLookup } from './xdr-store.mjs';
-import { backupBeforeChange, keepBackup, readRestoreId, restoreOneNote } from './note-restore.mjs';
+import { backupBeforeChange, bodyKeys, keepBackup, readRestoreRequest, restoreOneNote } from './note-restore.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const MAX_TITLE = 200;
@@ -164,9 +164,11 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
 
   // POST /api/restore (10단계): 비공개 사본에서 본인 메모 한 건만 되살립니다. 요청에서는 id만 읽습니다.
   const restore = guarded(['POST'], async ({ request, response, supabase, userId }) => {
-    const id = readRestoreId(request.body);
-    if (!id) return response.status(400).json({ error: 'INVALID_BODY' });
-    const result = await restoreOneNote({ supabase, userId, id });
+    // 심판·클라이언트가 실제로 보낸 필드 이름만 남깁니다(값은 남기지 않음).
+    console.info(`notes 복구 요청 필드: ${bodyKeys(request.body).join(',') || '(없음)'}`);
+    const parsed = readRestoreRequest(request.body);
+    if (!parsed) return response.status(400).json({ error: 'INVALID_BODY' });
+    const result = await restoreOneNote({ supabase, userId, id: parsed.id, expect: parsed });
     if (result.failure) console.error(`notes 복구 실패 ${result.failure}`);
     else if (result.reason) console.warn(`notes 거부: ${result.reason}`);
     return response.status(result.status).json(result.body);

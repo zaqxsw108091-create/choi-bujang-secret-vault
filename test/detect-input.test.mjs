@@ -86,3 +86,8 @@ test('network가 없거나 unknown이면 계약대로 폭주만으로 판단하�
   const result = detect([...history(5, 'net_a'), ...withNet(reads(130), 'net_b')]);
   assert.deepEqual(Object.keys(result).sort(), ['action', 'reasonCode', 'subject']);
 });
+
+test('10분 경계: 정확히 10분(600초) 안의 121건은 같은 구간이다', () => {
+  assert.equal(detect(reads(121, { gap: 5000 })).action, 'propose_revocation');
+  assert.equal(detect(reads(121, { gap: 5001 })).action, 'observe');
+});

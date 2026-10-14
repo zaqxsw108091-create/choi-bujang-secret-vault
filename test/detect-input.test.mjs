@@ -48,3 +48,17 @@ test('burst_read: 다른 사용자 합산·10분 밖·GET 아닌 사건은 세�
 test('burst_read: 뒤섞인 순서도 구간으로 센다', () => {
   assert.equal(detect(reads(130).reverse()).action, 'propose_revocation');
 });
+
+test('회수 제안: 대상 하나와 이유 코드만 담고 입력은 바꾸지 않는다', () => {
+  const input = [...reads(130, { sub: 'z_fixture' }), ...reads(130, { sub: 'b_fixture' })];
+  const before = JSON.stringify(input);
+  const result = detect(input);
+  assert.deepEqual(result, { action: 'propose_revocation', reasonCode: 'burst_read', subject: 'b_fixture' });
+  assert.deepEqual(Object.keys(result).sort(), ['action', 'reasonCode', 'subject']);
+  assert.equal(JSON.stringify(input), before);
+});
+
+test('정상 사건은 회수 제안 없이 observe만 돌려준다', () => {
+  assert.deepEqual(detect(reads(30)), { action: 'observe' });
+  assert.deepEqual(detect([]), { action: 'observe' });
+});

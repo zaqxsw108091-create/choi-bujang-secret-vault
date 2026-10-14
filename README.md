@@ -331,7 +331,7 @@
 
 ## 10단계 제작 3: 비공개 사본에서 메모 한 건만 되살립니다
 
-`aleph.config.json`의 `restoreRoute`는 `POST /api/restore`입니다(`step`은 저장점 단계에서 올립니다). `allowedRoutes` 7개는 그대로이며, 복구 경로는 일부러 넣지 않았습니다. 정책 사본(`policy/policy-snapshot.json`)과 `npm run policy:restore`가 이 경로를 지우지 않게 하기 위해서입니다.
+`aleph.config.json`의 `restoreRoute`는 `POST /api/restore`입니다(`step`은 10단계 저장점에서 10으로 올렸습니다). `allowedRoutes` 7개는 그대로이며, 복구 경로는 일부러 넣지 않았습니다. 정책 사본(`policy/policy-snapshot.json`)과 `npm run policy:restore`가 이 경로를 지우지 않게 하기 위해서입니다.
 
 - **서비스**: Vercel 서버 함수 `api/restore.js`(처리는 `src/notes-api.mjs`의 `restore`와 `src/note-restore.mjs`). 데이터는 학습용 Supabase의 비공개 표 두 개에 있습니다: `notes_backup`(검증한 가상 메모 사본)과 `notes_restore_audit`(덧붙이기만 하는 복구 감사 기록). 두 표 모두 RLS를 켜고 anon·authenticated 권한을 회수했으며, 서버 전용 키를 쓰는 서버 함수만 접근합니다.
 - **경로·요청**: `POST /api/restore`, 로그인 토큰 필요, 본문은 `{"id":"<메모 UUID>"}`뿐입니다. `owner_id`·`title`·`content` 같은 값은 본문에 있어도 읽지 않습니다.
@@ -386,8 +386,19 @@
 | 두 계정 교차 요청(4·8단계) | A·B 로그인 후 Console | — | **미실행** |
 | 배포가 복구 뒤 상태인지 | 배포 주소의 `/aleph.json` 확인 | — | **미실행** |
 
-- **알려진 한계**: `src/attack-check.mjs`는 아직 `step` 10을 모릅니다. `aleph.config.json`의 `step`을 10으로 올리면 `npm run bundle`이 "이 단계의 공격 점검을 구현해 주세요"로 멈추며, 복구 경로(`POST /api/restore`)의 로그인 없는 거부 점검도 들어 있지 않습니다. 저장점 단계에서 함께 처리해야 하며 지금은 `step`을 9로 둡니다.
+- **알려진 한계(저장점에서 해결)**: 이 절을 쓸 때 `src/attack-check.mjs`는 `step` 10을 몰랐습니다. 10단계 저장점에서 `step` 10을 받아들이고 로그인 없는 `POST /api/restore` 점검을 더했습니다(아래 "10단계 저장점").
 - 복구 뒤 시험이 통과해도 운영 반 엔진의 사건 전달·접속 회수나 실제 심판의 복구 판정이 연결되었다는 뜻이 아닙니다.
+
+### 10단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
+
+- 작동하는 기능(로컬 시험 기준): 9단계까지에 더해, (1) `npm run policy:diff`가 검증한 정책 사본과 현재 시험 정책의 차이만 보여 주고, (2) `npm run policy:restore`가 확인 코드가 맞을 때만 정책 항목을 사본으로 되돌리며, (3) `POST /api/restore`가 비공개 사본(`notes_backup`)에서 본인 메모 한 건을 ID·소유자·내용 해시를 대조해 되살리고 감사 기록은 덧붙이기만 합니다. 1~9단계의 정상·금지 요청은 그대로입니다.
+- 설정 대조(2026-10-14): `aleph.config.json`은 `step` 10(빌드·배포 식별·점검 스크립트의 허용 목록에 10을 더함). `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소 `https://choi-bujang-secret-vault-tr33.vercel.app`, `judgeIssuer`·`identityProvider`·`originalApiUrl`은 9단계와 같음(바꾸지 않음). `allowedRoutes` 7개는 각각 실제 파일이 있고, `restoreRoute`는 `POST /api/restore`(`api/restore.js`). 복구 경로를 `allowedRoutes`에 넣지 않은 이유는 위 "10단계 제작 3"에 있습니다. `RULE_IDS`는 판정기의 다섯 규칙(`device_registered`, `step_up_required`, `note_zone_self`, `notice_zone_staff_only`, `route_unknown`)만이며 모두 구현했습니다. 판정기(`src/decider.mjs`)는 이번 단계에서 바꾸지 않았고, 계약의 요청 이름만 읽는지 `test/savepoint-10.test.mjs`가 소스를 검사합니다.
+- `src/attack-check.mjs`의 10단계 점검: 9단계의 점검에 로그인 없는 `POST /api/restore`(없는 id, 거부 기대)를 더합니다. 로그인 없는 요청 한 번이며 상태 번호만 기록합니다. A가 B의 사본으로 복구하는 요청은 두 계정이 필요해 **미실행**으로 적습니다. 이 결과는 학생 자기 점검이며 심판의 판정이 아닙니다.
+- **직접 확인할 것**:
+  - 사전 백업을 다시 읽어 검증했는가? 코드는 복원 때마다 사본을 다시 읽어 ID·소유자·내용 해시를 대조하고, 맞지 않으면 409로 멈춥니다(가짜 DB 시험으로 확인). 정책 사본은 `policy:diff`가 sha256을 다시 계산해 검증합니다. **실제 Supabase의 사본 표를 만들고 읽어 본 확인은 미실행**입니다(`sql/10-notes-backup.sql`의 [A]·[D]를 학생이 실행).
+  - 복구 뒤 정상 사용과 금지 요청을 재시험했는가? 로컬 시험(가짜 DB·가상 요청)에서는 했습니다. **배포된 서버와 두 계정으로 한 재시험은 미실행**이며, 순서는 위 "10단계 제작 4"에 있습니다.
+- **한계·미실행**: 배포 주소에 접속하지 못해 배포된 서버의 응답을 확인하지 못했습니다. 판정기가 `/restore` 경로를 `route_not_allowed`로 거부하는 것은 현재 계약·구역 표의 결과이며, 운영 반 엔진이 이 경로를 어떻게 다루는지는 확인하지 못했습니다. 실제 복구와 걸린 시간은 심판이 확인합니다.
+- 다시 실행: `npm ci`, `node --test test/*.mjs`, `npm run decider:test`, `npm run fixture:7`, `npm run detect:test`, `npm run policy:diff`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
 
 ## 다음 단계의 코딩 도구에 전달할 규칙
 

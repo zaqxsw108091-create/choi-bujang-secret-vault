@@ -314,7 +314,7 @@
 `src/detect.mjs`의 `detect(events)`만 바꿨습니다. 자료 API, 화면, 판정기(`src/decider.mjs`)와 접속 허용/거부 응답 형식은 그대로입니다.
 
 - **입력 읽기** (`readEvents`): 가상 사건에서 시각(`at`)·요청 종류(`method`)·가명 사용자(`identity.sub`) 세 값만 읽습니다. 메모 내용·토큰·실명은 복사하지도 돌려주지도 않습니다. 모양이 틀린 사건은 건너뛰고 개수만 셉니다. 배열이 아니면 `invalid_detection_events` 오류입니다.
-- **탐지 규칙 `burst_read`**: 같은 `sub`의 `GET`이 어느 10분 구간(시작 시각 포함, 끝 제외)에서든 120건을 넘으면 `{ action: 'propose_revocation', reasonCode: 'burst_read', subject }` 한 건을 돌려줍니다(여러 명이면 `sub` 이름순 첫 번째). 정확히 120건, 다른 사용자 합산, 10분 밖 분산, GET 아닌 요청은 `{ action: 'observe' }`입니다.
+- **탐지 규칙 `burst_read`**: 같은 `sub`의 `GET`이 어느 10분 구간(시작·끝 시각 모두 포함: 정확히 10분 간격의 사건도 같은 구간)에서든 120건을 넘으면 `{ action: 'propose_revocation', reasonCode: 'burst_read', subject }` 한 건을 돌려줍니다(여러 명이면 `sub` 이름순 첫 번째). 정확히 120건, 다른 사용자 합산, 10분 밖 분산, GET 아닌 요청은 `{ action: 'observe' }`입니다.
 - 이 결과는 접속 허용/거부 응답과 별개입니다. 회수 API는 만들지 않았고 기기 권한도 바꾸지 않았습니다.
 
 ### 9단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법

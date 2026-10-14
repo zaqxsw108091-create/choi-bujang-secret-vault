@@ -270,16 +270,18 @@
       }
       if (!response.ok) {
         let code = '';
-        try { code = (await response.json()).error ?? ''; } catch { /* 본문이 JSON이 아니면 상태 번호만 씁니다. */ }
+        let seen = '';
+        try { const data = await response.json(); code = data.error ?? ''; seen = typeof data.seen === 'string' ? data.seen : ''; } catch { /* 본문이 JSON이 아니면 상태 번호만 씁니다. */ }
         if (code.startsWith('DEVICE_')) {
           // 서버가 기기를 확인하지 못하면 보이던 자료도 지웁니다(회수된 기기에 옛 화면이 남지 않게).
-          const reason = DEVICE_TEXT[code] ?? '서버가 이 기기를 확인하지 못했습니다.';
+          const reason = (DEVICE_TEXT[code] ?? '서버가 이 기기를 확인하지 못했습니다.') + (seen ? ` [서버가 받은 요청: ${seen}]` : '');
           vaultLocked();
           deviceText(reason);
           throw new Error(reason);
         }
         throw new Error(code === 'TOO_MANY_PENDING' ? '승인 대기 중인 요청이 너무 많습니다. 서버에서 정리한 뒤 다시 시도해 주세요.'
-          : `요청을 처리하지 못했습니다. (HTTP ${response.status})`);
+          : code === 'INVALID_BODY' ? '제목은 비울 수 없고(1~200자) 내용은 5000자까지입니다. 내용은 비워도 됩니다.'
+            : `요청을 처리하지 못했습니다. (HTTP ${response.status})`);
       }
       return response.json();
     }

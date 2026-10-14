@@ -205,6 +205,8 @@ test('Vercel이 [id] 경로에 덧붙이는 id 쿼리가 있어도 승인된 기
     ['?id= 덧붙임', { serverUrl: `${path}?id=${A_NOTE}`, query: { id: A_NOTE } }],
     ['[id] 글자와 ?id=', { serverUrl: `/api/notes/[id]?id=${A_NOTE}`, query: { id: A_NOTE } }],
     ['query 객체만', { serverUrl: path, query: { id: A_NOTE } }],
+    ['%5Bid%5D 인코딩', { serverUrl: `/api/notes/%5Bid%5D?id=${A_NOTE}`, query: { id: A_NOTE } }],
+    ['id 자리가 [id]만, 쿼리 없음', { serverUrl: '/api/notes/[id]', query: { id: A_NOTE } }],
   ];
   for (const [label, shape] of shapes) {
     const db = world([row(d, A, 'approved')]);
@@ -228,4 +230,13 @@ test('Vercel이 [id] 경로에 덧붙이는 id 쿼리가 있어도 승인된 기
     assert.equal(out.status, 403, label);
   }
   assert.equal(db.tables.notes.length, 1, '거부된 요청은 자료를 지우지 않는다');
+});
+
+test('서명이 맞지 않으면 403 본문에 서버가 받은 요청(방법·주소)이 들어가고, 키나 서명 값은 들어가지 않는다', async () => {
+  const d = await newDevice();
+  const call = apiFor(world([row(d, A, 'approved')]))('item');
+  const url = `/api/notes/${A_NOTE}`;
+  const out = await call({ method: 'DELETE', url, serverUrl: `${url}?x=1`, query: { id: A_NOTE }, authorization: bearer(A), headers: await d.sign({ method: 'DELETE', url }) });
+  assert.deepEqual([out.status, out.body.error, out.body.seen], [403, 'DEVICE_PROOF_INVALID', `DELETE ${url}?x=1`]);
+  assert.doesNotMatch(JSON.stringify(out.body), /sig|[0-9a-f]{40}/iu);
 });

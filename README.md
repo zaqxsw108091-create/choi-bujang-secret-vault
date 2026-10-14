@@ -329,6 +329,19 @@
   - 실제 회수와 걸린 시간은 심판이 확인합니다.
 - 다시 실행: `node --test test/detect-input.test.mjs`, `npm run detect:test`, `npm run decider:test`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
 
+## 10단계 제작 3: 비공개 사본에서 메모 한 건만 되살립니다
+
+`aleph.config.json`의 `restoreRoute`는 `POST /api/restore`입니다(`step`은 저장점 단계에서 올립니다). `allowedRoutes` 7개는 그대로이며, 복구 경로는 일부러 넣지 않았습니다. 정책 사본(`policy/policy-snapshot.json`)과 `npm run policy:restore`가 이 경로를 지우지 않게 하기 위해서입니다.
+
+- **서비스**: Vercel 서버 함수 `api/restore.js`(처리는 `src/notes-api.mjs`의 `restore`와 `src/note-restore.mjs`). 데이터는 학습용 Supabase의 비공개 표 두 개에 있습니다: `notes_backup`(검증한 가상 메모 사본)과 `notes_restore_audit`(덧붙이기만 하는 복구 감사 기록). 두 표 모두 RLS를 켜고 anon·authenticated 권한을 회수했으며, 서버 전용 키를 쓰는 서버 함수만 접근합니다.
+- **경로·요청**: `POST /api/restore`, 로그인 토큰 필요, 본문은 `{"id":"<메모 UUID>"}`뿐입니다. `owner_id`·`title`·`content` 같은 값은 본문에 있어도 읽지 않습니다.
+- **응답**: 200 `{ id, restored, action, contentSha256, verified }`(`action`은 `inserted`·`updated`·`unchanged`). 메모 제목·본문은 응답에 없습니다. 거부: 401 로그인 없음, 400 잘못된 id·본문, 403 남의 사본, 404 사본 없음, 405 POST 외, 409 `BACKUP_INVALID`(사본의 ID·소유자·해시가 서로 맞지 않음)·`OWNER_CONFLICT`(현재 행의 소유자가 사본과 다름), 503 앞 감사 기록을 쓰지 못함, 500 `RESTORE_VERIFY_FAILED`(되살린 뒤 다시 읽은 값이 사본과 다름).
+- **대조**: 사본은 서버가 확인한 사용자 본인 것만 찾고, 사본의 ID·소유자·내용 해시(`sha256("<제목 바이트수>:<제목><본문 바이트수>:<본문>")`)를 다시 계산해 맞춥니다. 되살린 뒤 다시 읽어 ID·소유자·해시가 사본과 같은지 한 번 더 확인합니다.
+- **보존**: 바꾸는 행은 `id` 한 건뿐이며 다른 메모는 읽지도 쓰지도 않습니다. 소유자는 바꾸지 않고, 다른 사람 소유로 바뀐 행은 덮어쓰지 않습니다. 감사 기록은 덧붙이기만 하며(코드는 수정·삭제를 하지 않고, SQL이 권한 회수와 트리거로 막음), 앞 기록을 쓰지 못하면 메모를 바꾸지 않습니다. 로그에는 짧은 사유 코드만 남습니다.
+- **학생이 할 일**: [`sql/10-notes-backup.sql`](sql/10-notes-backup.sql)을 SQL Editor에서 [A] → [B] → [C] → [D] 구역별로 따로 실행합니다. [C]의 `<<B_EMAIL>>`·`<<NOTE_ID>>`는 실행 화면에서만 시험 계정 B의 이메일과 B 메모 id로 바꾸고 저장하지 않습니다(침해 전에 실행). 이 SQL에는 메모 본문·이메일이 없습니다. 환경변수는 2단계와 같습니다.
+- **확인한 것(로컬 가짜 DB 시험, `node --test test/note-restore.test.mjs`)**: B가 변조·삭제한 B의 메모가 사본과 같은 ID·소유자·해시로 돌아오고, A의 메모와 B의 다른 메모는 그대로입니다. A가 B의 사본으로 요청하면 403, 사본이 바뀌었으면 409, 소유자가 바뀐 행은 덮어쓰지 않고 409, 앞 감사 기록 실패는 503입니다.
+- **확인하지 못한 것**: 실제 Supabase에 표를 만들었는지, 배포된 `/api/restore`가 응답하는지, 해시 식이 DB에서 코드와 같은 값을 내는지([A] 구역 질의로 학생이 확인)는 하지 못했습니다. 운영 반 심판이 이 경로를 어떻게 호출하는지, 판정기(`decider.mjs`)가 이 경로를 허용하는지도 확인하지 못했습니다(`api/`는 판정기를 부르지 않음).
+
 ## 다음 단계의 코딩 도구에 전달할 규칙
 
 [AGENTS.md](AGENTS.md)를 먼저 읽히고 한 번에 한 제작 단위만 요청하세요. 2단계부터는 자료 보호를 구현할 때 `public/data.json`을 복사하는 1단계 빌드 흐름도 함께 바꿔야 합니다. 3단계 이후의 로그인, 허용 경로, 5단계의 원본 API 주소, 6단계 이후 정책 규칙은 해당 단계 원고와 계약에 맞춰 추가합니다. 비밀번호·토큰·서버 전용 키·실제 학생 기록을 코드, Git, 제출 묶음에 넣지 않습니다.

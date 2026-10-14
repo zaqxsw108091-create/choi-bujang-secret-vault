@@ -89,7 +89,10 @@ export function createNotesApi({ getVerifier, getSupabase, getPolicyPlan = polic
       // 11단계: 로그인한 뒤, 이 기기가 서버에 등록(승인)된 기기이고 요청이 그 기기의 서명을 가졌는지 봅니다. 실패하면 자료를 읽기 전에 멈춥니다.
       if (needsDevice && deviceGate) {
         const device = await deviceGate({ request, supabase, userId: login.userId });
-        if (!device.ok) return deny(response, device.status, device.error, device.reason);
+        if (!device.ok) {
+          console.warn(`notes 거부: ${device.reason}`);
+          return response.status(device.status).json({ error: device.error, ...(device.seen ? { seen: device.seen } : {}) });
+        }
       }
       // 8단계: 로그인을 통과한 요청에 경로로 정한 자원 ID(note:…)를 붙입니다. 판단에는 아직 쓰지 않습니다.
       const resourceId = resourceIdOf(request.url ?? '');

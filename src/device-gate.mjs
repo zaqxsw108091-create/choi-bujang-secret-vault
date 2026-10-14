@@ -42,21 +42,27 @@ const bodyText = (body) => typeof body === 'string' ? body
   : body && typeof body === 'object' && Object.keys(body).length ? JSON.stringify(body) : '';
 export const signedText = ({ method, target, ts, body }) => `v1\n${method}\n${target}\n${ts}\n${sha256Hex(body)}`;
 const targetOf = (url) => { const u = new URL(url ?? '/', 'http://local'); return `${u.pathname}${u.search}`; };
-// Vercel은 [id] 파일로 요청을 넘길 때 주소에 경로의 id를 쿼리(?id=…)로 덧붙이거나 경로에 [id] 글자를 쓸 수 있습니다.
-// 브라우저가 서명한 주소에는 그 덧붙임이 없으므로, 서버가 자기 쪽에서 덧붙은 부분만 걷어낸 주소도 후보로 둡니다.
-// 걷어내는 것은 "경로의 마지막 조각과 똑같은 id 쿼리"뿐입니다(그 id는 서명된 경로에 이미 들어 있어 잃는 정보가 없습니다).
-// 요청이 후보 중 하나와 서명이 맞아야 하며, 경로·쿼리의 다른 부분이 서명과 다르면 어느 후보도 맞지 않아 거부됩니다.
+// Vercel은 [id] 파일로 요청을 넘길 때 서버가 보는 주소를 바꿀 수 있습니다: 쿼리에 ?id=<id>를 덧붙이거나, 경로의 id 자리를
+// [id] 또는 %5Bid%5D로 쓰기도 합니다. 브라우저가 서명한 주소에는 그런 덧붙임이 없으므로, 서버가 "실제로 처리할 id"로 다시 쓴 주소도 후보로 둡니다.
+// 후보는 마지막 경로 조각이 id 자신이거나 [id] 자리표시자일 때만 만들고, 마지막 조각을 request.query.id(핸들러가 실제로 쓰는 id)로 바꿉니다.
+// 즉 서명은 "방법 + 핸들러가 처리할 바로 그 id"에 묶입니다. 걷어내는 쿼리는 그 id와 같은 id 한 가지뿐이고, 경로의 앞부분이나
+// 다른 쿼리가 서명과 다르면 어느 후보도 맞지 않아 거부됩니다.
 export function targetsOf(request) {
   const raw = targetOf(request.url);
   const id = typeof request.query?.id === 'string' ? request.query.id : null;
   if (!id) return [raw];
   const u = new URL(request.url ?? '/', 'http://local');
-  const path = u.pathname.includes('/[id]') ? u.pathname.replace('/[id]', `/${id}`) : u.pathname;
+  let pathname = u.pathname;
+  try { pathname = decodeURIComponent(pathname); } catch { /* 디코딩이 안 되면 원래 경로를 씁니다. */ }
+  const segments = pathname.split('/').filter(Boolean);
+  const last = segments.pop();
+  if (last !== id && last !== '[id]') return [raw];
   const params = new URLSearchParams(u.search);
-  if (path.split('/').filter(Boolean).pop() === id && params.get('id') === id) params.delete('id');
+  if (params.get('id') === id) params.delete('id');
   const rest = params.toString();
-  const stripped = rest ? `${path}?${rest}` : path;
-  return stripped === raw ? [raw] : [raw, stripped];
+  const base = `/${[...segments, id].join('/')}`;
+  const rebuilt = rest ? `${base}?${rest}` : base;
+  return rebuilt === raw ? [raw] : [raw, rebuilt];
 }
 
 export function createDeviceGate({ now = () => Date.now(), subtle = globalThis.crypto.subtle } = {}) {
@@ -91,7 +97,9 @@ export function createDeviceGate({ now = () => Date.now(), subtle = globalThis.c
         }
       }
     } catch { valid = false; }
-    return valid ? { ok: true } : { ok: false, status: 403, error: 'DEVICE_PROOF_INVALID', reason: 'device_signature_invalid' };
+    // 서명이 맞지 않을 때만, 서버가 받은 방법과 주소(요청 자신의 경로. 비밀 아님)를 알려 원인을 바로 볼 수 있게 합니다.
+    return valid ? { ok: true } : { ok: false, status: 403, error: 'DEVICE_PROOF_INVALID', reason: 'device_signature_invalid',
+      seen: `${request.method} ${request.url ?? ''}`.slice(0, 200) };
   };
 }
 

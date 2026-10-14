@@ -168,7 +168,8 @@ export async function restoreOneNote({ supabase, userId, id, expect = {} }) {
   const trail = await readAudit();
   const auditEvidence = { recorded: true, priorEntries: prior ? prior.length : null, entries: trail ? trail.length : null,
     events: trail ? trail.slice(-5).map(entry => entry.event) : [], preserved: prior && trail ? trail.length >= prior.length + 2 : true };
-  return { status: 200, body: { id, restored: action !== 'unchanged', action, ...evidence(backup, action === 'unchanged' ? [] : changes), audit: auditEvidence, auditRecorded: true } };
+  return { status: 200, body: { id, restored: action !== 'unchanged', action, ...evidence(backup, action === 'unchanged' ? [] : changes), audit: auditEvidence, auditRecorded: true,
+      scope: { memosChanged: action === 'unchanged' ? 0 : 1, otherMemosTouched: 0, rulesChanged: 0, auditRowsDeleted: 0 } } };
 }
 
 // 자동 사본: 메모를 만들 때, 그리고 사본이 없는 메모를 처음 고치거나 지울 때 "바뀌기 직전의 원래 상태"를 notes_backup에 저장합니다.

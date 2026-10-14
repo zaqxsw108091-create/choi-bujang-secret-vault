@@ -168,7 +168,11 @@ export async function restoreOneNote({ supabase, userId, id, expect = {} }) {
   const trail = await readAudit();
   const auditEvidence = { recorded: true, priorEntries: prior ? prior.length : null, entries: trail ? trail.length : null,
     events: trail ? trail.slice(-5).map(entry => entry.event) : [], preserved: prior && trail ? trail.length >= prior.length + 2 : true };
-  return { status: 200, body: { id, restored: action !== 'unchanged', action, ...evidence(backup, action === 'unchanged' ? [] : changes), audit: auditEvidence, auditRecorded: true,
+  // 이번 복구가 남긴 마지막 기록(누가(소유자 본인)·언제·어떤 메모·어떤 결과): 시각·메모 ID·결과 이름만 보여 주고 메모 내용은 싣지 않습니다.
+  const lastEntry = trail && trail.length > 0 ? trail[trail.length - 1] : null;
+  if (lastEntry) auditEvidence.entry = { auditId: lastEntry.id ?? null, noteId: id, actor: 'owner', at: lastEntry.at ?? null,
+    event: lastEntry.event, restoreVersion: backup.content_sha256.slice(0, 12) };
+  return { status: 200, body: { id, restored: action !== 'unchanged', action, ...evidence(backup, action === 'unchanged' ? [] : changes), audit: auditEvidence, auditRecorded: true, auditId: lastEntry?.id ?? null, restoredAt: lastEntry?.at ?? null,
       scope: { memosChanged: action === 'unchanged' ? 0 : 1, otherMemosTouched: 0, rulesChanged: 0, auditRowsDeleted: 0 } } };
 }
 

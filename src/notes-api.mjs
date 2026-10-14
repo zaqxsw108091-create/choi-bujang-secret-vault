@@ -15,6 +15,7 @@ import { createLoginVerifier } from './verify-login.mjs';
 import { resourceIdOf } from './resources.mjs';
 import { clientIp, findBlock, loadBlockRules } from './xdr-block.mjs';
 import { defaultBlockLookup } from './xdr-store.mjs';
+import { readRestoreId, restoreOneNote } from './note-restore.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const MAX_TITLE = 200;
@@ -155,7 +156,17 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
     return data?.length ? response.status(200).json({ id: data[0].id }) : await notFound();
   });
 
-  return { collection, item };
+  // POST /api/restore (10단계): 비공개 사본에서 본인 메모 한 건만 되살립니다. 요청에서는 id만 읽습니다.
+  const restore = guarded(['POST'], async ({ request, response, supabase, userId }) => {
+    const id = readRestoreId(request.body);
+    if (!id) return response.status(400).json({ error: 'INVALID_BODY' });
+    const result = await restoreOneNote({ supabase, userId, id });
+    if (result.failure) console.error(`notes 복구 실패 ${result.failure}`);
+    else if (result.reason) console.warn(`notes 거부: ${result.reason}`);
+    return response.status(result.status).json(result.body);
+  });
+
+  return { collection, item, restore };
 }
 
 // 서버 런타임에서 한 번만 만듭니다. 환경변수가 없으면 만들지 않고 던집니다.

@@ -329,6 +329,77 @@
   - 실제 회수와 걸린 시간은 심판이 확인합니다.
 - 다시 실행: `node --test test/detect-input.test.mjs`, `npm run detect:test`, `npm run decider:test`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
 
+## 10단계 제작 3: 비공개 사본에서 메모 한 건만 되살립니다
+
+`aleph.config.json`의 `restoreRoute`는 `POST /api/restore`입니다(`step`은 10단계 저장점에서 10으로 올렸습니다). `allowedRoutes` 7개는 그대로이며, 복구 경로는 일부러 넣지 않았습니다. 정책 사본(`policy/policy-snapshot.json`)과 `npm run policy:restore`가 이 경로를 지우지 않게 하기 위해서입니다.
+
+- **서비스**: Vercel 서버 함수 `api/restore.js`(처리는 `src/notes-api.mjs`의 `restore`와 `src/note-restore.mjs`). 데이터는 학습용 Supabase의 비공개 표 두 개에 있습니다: `notes_backup`(검증한 가상 메모 사본)과 `notes_restore_audit`(덧붙이기만 하는 복구 감사 기록). 두 표 모두 RLS를 켜고 anon·authenticated 권한을 회수했으며, 서버 전용 키를 쓰는 서버 함수만 접근합니다.
+- **경로·요청**: `POST /api/restore`, 로그인 토큰 필요, 본문은 `{"id":"<메모 UUID>"}`뿐입니다. `owner_id`·`title`·`content` 같은 값은 본문에 있어도 읽지 않습니다.
+- **응답**: 200 `{ id, restored, action, contentSha256, verified }`(`action`은 `inserted`·`updated`·`unchanged`). 메모 제목·본문은 응답에 없습니다. 거부: 401 로그인 없음, 400 잘못된 id·본문, 403 남의 사본, 404 사본 없음, 405 POST 외, 409 `BACKUP_INVALID`(사본의 ID·소유자·해시가 서로 맞지 않음)·`OWNER_CONFLICT`(현재 행의 소유자가 사본과 다름), 503 앞 감사 기록을 쓰지 못함, 500 `RESTORE_VERIFY_FAILED`(되살린 뒤 다시 읽은 값이 사본과 다름).
+- **대조**: 사본은 서버가 확인한 사용자 본인 것만 찾고, 사본의 ID·소유자·내용 해시(`sha256("<제목 바이트수>:<제목><본문 바이트수>:<본문>")`)를 다시 계산해 맞춥니다. 되살린 뒤 다시 읽어 ID·소유자·해시가 사본과 같은지 한 번 더 확인합니다.
+- **보존**: 바꾸는 행은 `id` 한 건뿐이며 다른 메모는 읽지도 쓰지도 않습니다. 소유자는 바꾸지 않고, 다른 사람 소유로 바뀐 행은 덮어쓰지 않습니다. 감사 기록은 덧붙이기만 하며(코드는 수정·삭제를 하지 않고, SQL이 권한 회수와 트리거로 막음), 앞 기록을 쓰지 못하면 메모를 바꾸지 않습니다. 로그에는 짧은 사유 코드만 남습니다.
+- **학생이 할 일**: [`sql/10-notes-backup.sql`](sql/10-notes-backup.sql)을 SQL Editor에서 [A] → [B] → [C] → [D] 구역별로 따로 실행합니다. [C]의 `<<B_EMAIL>>`·`<<NOTE_ID>>`는 실행 화면에서만 시험 계정 B의 이메일과 B 메모 id로 바꾸고 저장하지 않습니다(침해 전에 실행). 이 SQL에는 메모 본문·이메일이 없습니다. 환경변수는 2단계와 같습니다.
+- **확인한 것(로컬 가짜 DB 시험, `node --test test/note-restore.test.mjs`)**: B가 변조·삭제한 B의 메모가 사본과 같은 ID·소유자·해시로 돌아오고, A의 메모와 B의 다른 메모는 그대로입니다. A가 B의 사본으로 요청하면 403, 사본이 바뀌었으면 409, 소유자가 바뀐 행은 덮어쓰지 않고 409, 앞 감사 기록 실패는 503입니다.
+- **확인하지 못한 것**: 실제 Supabase에 표를 만들었는지, 배포된 `/api/restore`가 응답하는지, 해시 식이 DB에서 코드와 같은 값을 내는지([A] 구역 질의로 학생이 확인)는 하지 못했습니다. 운영 반 심판이 이 경로를 어떻게 호출하는지, 판정기(`decider.mjs`)가 이 경로를 허용하는지도 확인하지 못했습니다(`api/`는 판정기를 부르지 않음).
+
+## 10단계 제작 4: 복구 뒤 1~9단계 요청을 다시 실행하는 순서
+
+복구가 끝났다고 말하기 전에, 자료와 정책이 돌아왔는지와 이전에 막던 요청이 다시 거부되는지를 아래 순서로 직접 확인합니다. 이 절은 **순서와 기대 결과**만 적습니다. 아래 "실행 기록" 표에 `실행함`으로 적힌 것 말고는 모두 **미실행**이며, 실행하지 않은 시험은 통과로 적지 않습니다.
+
+### 순서
+
+1. **준비**: 저장소 폴더에서 `npm ci`(처음 한 번). 복구 전에 현재 상태를 바꾸지 않았는지 `git status`로 봅니다.
+2. **정책이 돌아왔는지**: `npm run policy:diff`. 기대: `변경 범위: 없음`. 차이가 있으면 `npm run policy:restore`로 바뀔 항목을 보고, 맞으면 화면에 나온 확인 코드로 `--apply`를 실행한 뒤 다시 `policy:diff`를 봅니다. 판정기 규칙(`ruleIds`) 차이는 이 절차가 되돌리지 못하므로 코드를 직접 확인합니다.
+3. **자료가 돌아왔는지**(시험 계정 B, 배포 화면): B로 로그인한 창의 Console에서 화면이 저장한 로그인 값으로 `POST /api/restore`에 `{"id":"<B 메모 id>"}`를 보냅니다(토큰은 출력하지 않고 상태와 응답 필드만 봅니다). 기대: `200`, `verified: true`, `contentSha256`이 SQL Editor에서 `sql/10-notes-backup.sql`의 [D-1]로 본 사본의 `content_sha256`과 같음. 같은 요청을 A 로그인으로 B의 id에 보내면 `403`이어야 합니다. 그다음 B 화면을 새로고침해 B의 메모가 보이고 A의 메모가 보이지 않는지 봅니다.
+4. **로컬 시험 한꺼번에**: `node --test test/*.mjs`, `npm run decider:test`, `npm run fixture:7`, `npm run detect:test`, `npm run check:secrets`. 이것은 가상·가짜 DB 시험이며 배포나 심판의 결과가 아닙니다.
+5. **배포 서버에 직접 보내는 비로그인 요청**: 배포 주소가 접속되는 컴퓨터에서 일반 커밋 위에 `npm run bundle`을 실행합니다(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음). 접속되지 않으면 점검이 "확인하지 못함"으로 기록되며 그 값은 통과가 아닙니다.
+6. **두 계정이 필요한 요청**(배포 화면, 학생이 직접): 아래 표의 "두 계정" 줄을 A·B 로그인으로 확인합니다. `npm run bundle`은 이 요청을 보내지 않고 미실행으로 적습니다.
+
+### 단계별 정상·금지 요청과 기대 결과
+
+| 단계 | 정상 요청(통과해야 함) | 금지 요청(거부되어야 함) | 어디서 확인 |
+| --- | --- | --- | --- |
+| 1~2 | 화면 `/`가 열리고 카드가 보임 | `GET /data.json`이 404, `/aleph.json`에 확인 표시 없음 | 2단계의 `curl` 한 줄(위 "2단계 확인 절차") 또는 `npm run bundle` |
+| 3 | A가 로그인해 메모 목록·추가·읽기·수정·삭제 | 로그인 없는 5가지 요청, 가짜·만료·다른 발급자 토큰이 모두 401 | `npm run bundle`(점검 8개), `node --test test/r5.test.mjs` |
+| 4 | A·B가 각자 자기 메모만 읽고 추가·수정·삭제 | B가 A의 메모를 읽기·수정·삭제하면 403, 소유자 변경 무시 | 두 계정(미실행), `node --test test/r5.test.mjs`(가짜 DB) |
+| 4~5 | 서버 함수를 거친 요청 | anon 키로 `/rest/v1/notes` 직접 요청이 거부됨(권한 없음), 가짜 계정 `POST /api/login`이 401 | `npm run bundle`(직접 점검), SQL [C]·`has_table_privilege` |
+| 6 | 등록된 기기의 가상 요청 허용 | 미등록 기기의 가상 요청 거부 | `npm run decider:test`(가상, 심판 아님) |
+| 7 | 평소 접속은 허용 | 복합 이상 접속은 추가 확인(`step_up`) | `npm run decider:test`, `npm run fixture:7`(가상) |
+| 8 | 본인 메모 목록·추가·수정·삭제, 응답 헤더 `X-Resource-Id` | `?role=instructor`를 실은 비로그인 요청 401, `/api/notices` 404, 다른 계정 직접 요청 403 | `npm run bundle`(점검 2개), 두 계정(미실행) |
+| 9 | 정상 사건은 회수 제안 없음 | 10분 안 GET 120건 초과는 `burst_read` 회수 제안 | `npm run detect:test`(가상 사건). 실제 접속 회수는 연결하지 않음 |
+| 10 | B가 자기 메모 한 건을 `POST /api/restore`로 복원 | A의 요청 403, 사본 변조 409, 로그인 없음 401 | 위 순서 3(미실행), `node --test test/note-restore.test.mjs`(가짜 DB) |
+
+기대 결과가 하나라도 다르면 첫 어긋난 줄만 근거로 한 가지를 고치고, 순서 2부터 다시 실행합니다.
+
+### 실행 기록
+
+| 항목 | 명령·방법 | 결과 | 실행 여부 |
+| --- | --- | --- | --- |
+| 정책 사본과 현재 정책 | `npm run policy:diff` (코딩 도구 환경, 2026-10-14) | 사본 `step9-2026-10-14` 검증 통과, 변경 범위 없음. 정책을 변조했다가 되돌린 실제 복구는 하지 않았고, 현재 저장소가 사본과 같다는 것만 확인함 | 실행함 |
+| 로컬 전체 시험 | `node --test test/*.mjs` (2026-10-14) | 155개 중 155개 통과, 실패 0. 가짜 DB 시험이며 배포·심판 결과가 아님 | 실행함 |
+| 판정기 가상 요청 | `npm run decider:test` (2026-10-14) | 가상 요청 사례 4개가 모두 통과로 표시됨, 실패 줄 없음(심판 판정 아님) | 실행함 |
+| 7단계 가상 사건 | `npm run fixture:7` (2026-10-14) | 정상 사건 `allow`, 복합 이상 사건 `step_up` | 실행함 |
+| 9단계 가상 사건 | `npm run detect:test` (2026-10-14) | 가상 사건 사례 6개가 모두 통과로 표시됨, 실패 줄 없음(실제 회수 아님) | 실행함 |
+| 비밀값 검사 | `npm run check:secrets` (2026-10-14) | Git 추적 파일 83개에서 키처럼 보이는 문자열 없음 | 실행함 |
+| 실제 Supabase 복구(순서 3) | B 로그인으로 `POST /api/restore`, SQL [D-1]과 해시 대조 | — | **미실행** |
+| 배포된 서버에 직접 보내는 요청(순서 5) | `npm run bundle` | — (코딩 도구 환경은 배포 주소에 접속하지 못함) | **미실행** |
+| 두 계정 교차 요청(4·8단계) | A·B 로그인 후 Console | — | **미실행** |
+| 배포가 복구 뒤 상태인지 | 배포 주소의 `/aleph.json` 확인 | — | **미실행** |
+
+- **알려진 한계(저장점에서 해결)**: 이 절을 쓸 때 `src/attack-check.mjs`는 `step` 10을 몰랐습니다. 10단계 저장점에서 `step` 10을 받아들이고 로그인 없는 `POST /api/restore` 점검을 더했습니다(아래 "10단계 저장점").
+- 복구 뒤 시험이 통과해도 운영 반 엔진의 사건 전달·접속 회수나 실제 심판의 복구 판정이 연결되었다는 뜻이 아닙니다.
+
+### 10단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
+
+- 작동하는 기능(로컬 시험 기준): 9단계까지에 더해, (1) `npm run policy:diff`가 검증한 정책 사본과 현재 시험 정책의 차이만 보여 주고, (2) `npm run policy:restore`가 확인 코드가 맞을 때만 정책 항목을 사본으로 되돌리며, (3) `POST /api/restore`가 비공개 사본(`notes_backup`)에서 본인 메모 한 건을 ID·소유자·내용 해시를 대조해 되살리고 감사 기록은 덧붙이기만 합니다. 1~9단계의 정상·금지 요청은 그대로입니다.
+- 설정 대조(2026-10-14): `aleph.config.json`은 `step` 10(빌드·배포 식별·점검 스크립트의 허용 목록에 10을 더함). `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소 `https://choi-bujang-secret-vault-tr33.vercel.app`, `judgeIssuer`·`identityProvider`·`originalApiUrl`은 9단계와 같음(바꾸지 않음). `allowedRoutes` 7개는 각각 실제 파일이 있고, `restoreRoute`는 `POST /api/restore`(`api/restore.js`). 복구 경로를 `allowedRoutes`에 넣지 않은 이유는 위 "10단계 제작 3"에 있습니다. `RULE_IDS`는 판정기의 다섯 규칙(`device_registered`, `step_up_required`, `note_zone_self`, `notice_zone_staff_only`, `route_unknown`)만이며 모두 구현했습니다. 판정기(`src/decider.mjs`)는 이번 단계에서 바꾸지 않았고, 계약의 요청 이름만 읽는지 `test/savepoint-10.test.mjs`가 소스를 검사합니다(계약 이름 18개는 `docs/DECIDER_REQUEST.md`에서 직접 읽고, `step_up`을 포함한 고정 시드 무작위 요청 3000건의 응답 형식도 검사).
+- `src/attack-check.mjs`의 10단계 점검: 9단계의 점검에 로그인 없는 `POST /api/restore`(없는 id, 거부 기대)를 더합니다. 로그인 없는 요청 한 번이며 상태 번호만 기록합니다. A가 B의 사본으로 복구하는 요청은 두 계정이 필요해 **미실행**으로 적습니다. 이 결과는 학생 자기 점검이며 심판의 판정이 아닙니다.
+- **직접 확인할 것**:
+  - 사전 백업을 다시 읽어 검증했는가? 코드는 복원 때마다 사본을 다시 읽어 ID·소유자·내용 해시를 대조하고, 맞지 않으면 409로 멈춥니다(가짜 DB 시험으로 확인). 정책 사본은 `policy:diff`가 sha256을 다시 계산해 검증합니다. **실제 Supabase의 사본 표를 만들고 읽어 본 확인은 미실행**입니다(`sql/10-notes-backup.sql`의 [A]·[D]를 학생이 실행).
+  - 복구 뒤 정상 사용과 금지 요청을 재시험했는가? 로컬 시험(가짜 DB·가상 요청)에서는 했습니다. **배포된 서버와 두 계정으로 한 재시험은 미실행**이며, 순서는 위 "10단계 제작 4"에 있습니다.
+- **한계·미실행**: 배포 주소에 접속하지 못해 배포된 서버의 응답을 확인하지 못했습니다. 판정기가 `/restore` 경로를 `route_not_allowed`로 거부하는 것은 현재 계약·구역 표의 결과입니다. 이 저장소의 `docs/`·`package/`에는 운영 반 엔진이 복구 경로를 어떻게 부르는지(판정기를 거치는지) 설명이 없고, 제출 묶음의 `restoreRoute` 필드로만 전달됩니다. 그래서 **운영 측에 확인이 필요**하며, 답을 받기 전에는 판정기를 바꾸지 않았습니다. 실제 복구와 걸린 시간은 심판이 확인합니다.
+- 다시 실행: `npm ci`, `node --test test/*.mjs`, `npm run decider:test`, `npm run fixture:7`, `npm run detect:test`, `npm run policy:diff`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
+
 ## 다음 단계의 코딩 도구에 전달할 규칙
 
 [AGENTS.md](AGENTS.md)를 먼저 읽히고 한 번에 한 제작 단위만 요청하세요. 2단계부터는 자료 보호를 구현할 때 `public/data.json`을 복사하는 1단계 빌드 흐름도 함께 바꿔야 합니다. 3단계 이후의 로그인, 허용 경로, 5단계의 원본 API 주소, 6단계 이후 정책 규칙은 해당 단계 원고와 계약에 맞춰 추가합니다. 비밀번호·토큰·서버 전용 키·실제 학생 기록을 코드, Git, 제출 묶음에 넣지 않습니다.

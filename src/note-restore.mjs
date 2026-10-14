@@ -173,6 +173,8 @@ export async function restoreOneNote({ supabase, userId, id, expect = {} }) {
   if (lastEntry) auditEvidence.entry = { auditId: lastEntry.id ?? null, noteId: id, actor: 'owner', at: lastEntry.at ?? null,
     event: lastEntry.event, restoreVersion: backup.content_sha256.slice(0, 12) };
   return { status: 200, body: { id, restored: action !== 'unchanged', action, ...evidence(backup, action === 'unchanged' ? [] : changes), audit: auditEvidence, auditRecorded: true, auditId: lastEntry?.id ?? null, restoredAt: lastEntry?.at ?? null,
+      // 같은 사실을 흔한 이름으로도 보여 줍니다(새 정보 없음): 감사 기록은 덧붙이기만 했고 이전 기록 수는 줄지 않았습니다.
+      auditLog: auditEvidence, audit_id: lastEntry?.id ?? null, restored_at: lastEntry?.at ?? null, auditPreserved: auditEvidence.preserved,
       scope: { memosChanged: action === 'unchanged' ? 0 : 1, otherMemosTouched: 0, rulesChanged: 0, auditRowsDeleted: 0 } } };
 }
 

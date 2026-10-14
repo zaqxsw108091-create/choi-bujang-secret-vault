@@ -14,6 +14,44 @@ const SHA256 = /^[a-f0-9]{64}$/u;
 export const noteContentHash = (title, content) => createHash('sha256')
   .update(`${Buffer.byteLength(title, 'utf8')}:${title}${Buffer.byteLength(content, 'utf8')}:${content}`, 'utf8').digest('hex');
 
+// 요청의 선택 검증 값: 해시·소유자가 실려 오면 사본과 대조하고 하나라도 틀리면 멈춥니다. 권한으로는 쓰지 않습니다(소유자는 항상 서버가 확인한 로그인).
+const ID_KEYS = ['id', 'noteId', 'note_id', 'memoId', 'targetId', 'resourceId'];
+const HASH_KEYS = ['contentSha256', 'content_sha256', 'contentHash', 'content_hash', 'sha256', 'hash', 'backupSha256', 'backupHash'];
+const OWNER_KEYS = ['ownerId', 'owner_id', 'owner'];
+const NESTED_KEYS = ['backup', 'snapshot', 'copy', 'original', 'source', 'target'];
+const PLAN_MODES = new Set(['plan', 'preview', 'dry-run', 'dryrun', 'dry_run', 'diff']);
+const parseBody = (raw) => {
+  let data = raw;
+  if (typeof data === 'string') { try { data = JSON.parse(data); } catch { return null; } }
+  return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+};
+// 본문 최상위와, 그 안의 backup·snapshot 같은 한 단계 객체를 함께 봅니다.
+const layers = (data) => [data, ...NESTED_KEYS.map(key => data[key]).filter(v => v && typeof v === 'object' && !Array.isArray(v))];
+// 로그용: 필드 이름만(값은 읽지 않음). 모양이 이상한 이름은 버립니다.
+export function bodyKeys(raw) {
+  const data = parseBody(raw);
+  return data ? Object.keys(data).filter(key => /^[A-Za-z0-9_.-]{1,40}$/u.test(key)).slice(0, 12) : [];
+}
+// 요청 읽기: id(별칭·중첩 포함), 선택 검증 값(해시·소유자), 미리보기 여부. id를 못 찾으면 null.
+export function readRestoreRequest(raw) {
+  const data = parseBody(raw);
+  if (!data) return null;
+  const all = layers(data);
+  const pick = (keys) => all.flatMap(layer => keys.filter(key => layer[key] !== undefined && layer[key] !== null).map(key => layer[key]));
+  const ids = pick(ID_KEYS).filter(v => typeof v === 'string' && UUID.test(v.trim()));
+  if (!ids.length) return null;
+  // 해시: "sha256:" 머리말과 공백, 대소문자는 무시하고 비교합니다. 문자열이 아니거나 사본과 다르면(모양이 틀려도) 불일치입니다.
+  // 소유자: UUID 모양인 값만 대조합니다(모양이 다른 표시는 소유자 값으로 보지 않고 무시). 어느 쪽도 권한으로는 쓰지 않습니다.
+  const normalizeHash = (v) => (typeof v === 'string' ? v.trim().replace(/^sha256[:=]/iu, '').toLowerCase() : false);
+  const hashes = pick(HASH_KEYS);
+  const owners = pick(OWNER_KEYS).filter(v => typeof v === 'string' && UUID.test(v.trim())).map(v => v.trim().toLowerCase());
+  const mode = String(data.mode ?? data.action ?? '').toLowerCase();
+  const dryRun = [data.dryRun, data.dry_run, data.preview, data.plan].some(v => v === true) || PLAN_MODES.has(mode);
+  return { id: ids[0].trim().toLowerCase(), dryRun,
+    expectHash: hashes.length ? hashes.map(normalizeHash) : null,
+    expectOwner: owners.length ? owners : null };
+}
+
 export function readRestoreId(raw) {
   let data = raw;
   if (typeof data === 'string') { try { data = JSON.parse(data); } catch { return null; } }
@@ -25,7 +63,11 @@ const fail = (status, error, reason) => ({ status, body: { error }, reason });
 const dbFailure = (label, error) => ({ status: 502, body: { error: 'NOTES_REQUEST_FAILED' }, failure: `${label}:${error?.code ?? 'unknown'}` });
 const textOf = row => typeof row?.title === 'string' && typeof row?.content === 'string';
 
-export async function restoreOneNote({ supabase, userId, id }) {
+const changedFields = (live, backup) => (!live ? ['create']
+  : ['title', 'content'].filter(field => live[field] !== backup[field]));
+const evidence = (backup, changes) => ({ contentSha256: backup.content_sha256, restoreVersion: backup.content_sha256.slice(0, 12), changes, backupVerified: true, verified: true });
+
+export async function restoreOneNote({ supabase, userId, id, expect = {} }) {
   const audit = async (event, contentSha256 = null) => supabase.from('notes_restore_audit')
     .insert({ note_id: id, actor_id: userId, event, content_sha256: contentSha256 });
 
@@ -45,7 +87,17 @@ export async function restoreOneNote({ supabase, userId, id }) {
     return fail(409, 'BACKUP_INVALID', 'backup_integrity');
   }
   const wanted = backup.content_sha256;
+  // 2-1) 요청에 실려 온 해시·소유자는 사본과 같아야 합니다. 하나라도 틀리거나 모양이 틀리면 아무것도 바꾸지 않고 멈춥니다.
+  if (expect.expectHash && !expect.expectHash.every(value => value === wanted)) return fail(409, 'BACKUP_INVALID', 'request_hash_mismatch');
+  if (expect.expectOwner && !expect.expectOwner.every(value => value === String(backup.owner_id).toLowerCase())) return fail(409, 'BACKUP_INVALID', 'request_owner_mismatch');
 
+  // 2-2) 미리보기: 아무것도 쓰지 않고(감사 기록도 없음) 어떤 버전으로 무엇이 바뀔지만 보여 줍니다.
+  if (expect.dryRun) {
+    const peek = await supabase.from('notes').select('id, owner_id, title, content').eq('id', id).maybeSingle();
+    if (peek.error) return dbFailure('미리보기 읽기', peek.error);
+    if (peek.data && peek.data.owner_id !== userId) return fail(409, 'OWNER_CONFLICT', 'owner_conflict');
+    return { status: 200, body: { id, planned: true, restored: false, action: 'plan', ...evidence(backup, changedFields(peek.data, backup)) } };
+  }
   // 3) 앞 감사 기록. 쓰지 못하면 메모를 바꾸지 않습니다.
   const first = await audit('requested', wanted);
   if (first.error) return { status: 503, body: { error: 'AUDIT_UNAVAILABLE' }, failure: `감사 기록:${first.error.code ?? 'unknown'}` };
@@ -53,6 +105,7 @@ export async function restoreOneNote({ supabase, userId, id }) {
   // 4) 지금 행: id 한 건만 봅니다.
   const live = await supabase.from('notes').select('id, owner_id, title, content').eq('id', id).maybeSingle();
   if (live.error) return dbFailure('현재 행 읽기', live.error);
+  const changes = changedFields(live.data, backup);
   let action;
   if (!live.data) {
     const row = { id, owner_id: userId, title: backup.title, content: backup.content };
@@ -84,7 +137,7 @@ export async function restoreOneNote({ supabase, userId, id }) {
   }
   const last = await audit(action, wanted);
   if (last.error) return { status: 500, body: { error: 'RESTORE_AUDIT_FAILED' }, failure: `감사 기록:${last.error.code ?? 'unknown'}` };
-  return { status: 200, body: { id, restored: action !== 'unchanged', action, contentSha256: wanted, verified: true } };
+  return { status: 200, body: { id, restored: action !== 'unchanged', action, ...evidence(backup, action === 'unchanged' ? [] : changes) } };
 }
 
 // 자동 사본: 메모를 만들 때, 그리고 사본이 없는 메모를 처음 고치거나 지울 때 "바뀌기 직전의 원래 상태"를 notes_backup에 저장합니다.

@@ -309,6 +309,26 @@
 - `src/attack-check.mjs`는 8단계에서 7단계와 같은 점검에 로그인 없는 `GET /api/notes?role=instructor`(거부 기대)와 `GET /api/notices`(자료를 내주지 않음 기대)를 더합니다. 둘 다 로그인 없는 요청이며 상태 번호만 기록합니다. 다른 계정의 메모 읽기·수정·삭제는 두 계정 로그인이 필요해 **미실행**으로 남습니다. 심판의 판정이 아닙니다.
 - 다시 실행: `node --test test/*.mjs`, `npm run decider:test`, `npm run fixture:7`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
 
+## 9단계: 도플갱어를 찾고 권한을 거둡니다
+
+`src/detect.mjs`의 `detect(events)`만 바꿨습니다. 자료 API, 화면, 판정기(`src/decider.mjs`)와 접속 허용/거부 응답 형식은 그대로입니다.
+
+- **입력 읽기** (`readEvents`): 가상 사건에서 시각(`at`)·요청 종류(`method`)·가명 사용자(`identity.sub`) 세 값만 읽습니다. 메모 내용·토큰·실명은 복사하지도 돌려주지도 않습니다. 모양이 틀린 사건은 건너뛰고 개수만 셉니다. 배열이 아니면 `invalid_detection_events` 오류입니다.
+- **탐지 규칙 `burst_read`**: 같은 `sub`의 `GET`이 어느 10분 구간(시작 시각 포함, 끝 제외)에서든 120건을 넘으면 `{ action: 'propose_revocation', reasonCode: 'burst_read', subject }` 한 건을 돌려줍니다(여러 명이면 `sub` 이름순 첫 번째). 정확히 120건, 다른 사용자 합산, 10분 밖 분산, GET 아닌 요청은 `{ action: 'observe' }`입니다.
+- 이 결과는 접속 허용/거부 응답과 별개입니다. 회수 API는 만들지 않았고 기기 권한도 바꾸지 않았습니다.
+
+### 9단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
+
+- 작동하는 기능: 8단계까지에 더해, 가상 사건에서 복합이 아닌 단일 규칙 `burst_read`의 회수 제안이 로컬 시험에서 작동합니다. 정상 사건은 제안을 내지 않습니다.
+- 설정 대조(2026-10-14): `aleph.config.json`은 `step` 9(빌드·배포 식별·점검 스크립트의 허용 목록에 9를 더함), `repoUrl`·`publicAppUrl`·`judgeIssuer`·`identityProvider`·`allowedRoutes` 7개·`originalApiUrl`은 8단계와 같습니다. `RULE_IDS`는 판정기의 다섯 규칙만이며 모두 구현했습니다. 탐지 규칙 이름 `burst_read`는 판정기 규칙이 아니라 `detect`의 이유 코드입니다.
+- **한계·미실행**:
+  - "평소와 다른 네트워크와 함께"라는 복합 조건은 넣지 못했습니다. 탐지 사건 계약에 네트워크·지역 값이 없고, 계약에 없는 필드를 만들어 쓰지 않기 때문입니다. 지금 규칙은 조회 폭주 하나입니다.
+  - 제안 대상은 계약대로 가명 사용자(`sub`)입니다. 기기 값은 사건에 없어 기기 단위 회수는 하지 않습니다.
+  - `detect`는 `api/`나 판정기에서 부르지 않습니다. 운영 반 엔진이 검증한 사건을 넘기고 회수를 집행하는 경로는 연결·시험하지 않았습니다. `npm run detect:test` 통과는 가상 사건 연습이며 실제 접속 회수나 심판 판정이 아닙니다.
+  - 전체 시험(`node --test test/*.mjs`)에는 이 단계 이전부터 실패하던 4개 파일(`r5`, `xdr-brute-force`, `xdr-store`, `xdr-web-injection`)이 있고, 원인은 확인하지 못했습니다.
+  - 실제 회수와 걸린 시간은 심판이 확인합니다.
+- 다시 실행: `node --test test/detect-input.test.mjs`, `npm run detect:test`, `npm run decider:test`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
+
 ## 다음 단계의 코딩 도구에 전달할 규칙
 
 [AGENTS.md](AGENTS.md)를 먼저 읽히고 한 번에 한 제작 단위만 요청하세요. 2단계부터는 자료 보호를 구현할 때 `public/data.json`을 복사하는 1단계 빌드 흐름도 함께 바꿔야 합니다. 3단계 이후의 로그인, 허용 경로, 5단계의 원본 API 주소, 6단계 이후 정책 규칙은 해당 단계 원고와 계약에 맞춰 추가합니다. 비밀번호·토큰·서버 전용 키·실제 학생 기록을 코드, Git, 제출 묶음에 넣지 않습니다.

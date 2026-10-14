@@ -398,13 +398,27 @@
 
 - 작동하는 기능(로컬 시험 기준): 9단계까지에 더해, (1) `npm run policy:diff`가 검증한 정책 사본과 현재 시험 정책의 차이만 보여 주고, (2) `npm run policy:restore`가 확인 코드가 맞을 때만 정책 항목을 사본으로 되돌리며, (3) `POST /api/restore`가 비공개 사본(`notes_backup`)에서 본인 메모 한 건을 ID·소유자·내용 해시를 대조해 되살리고 감사 기록은 덧붙이기만 합니다. 1~9단계의 정상·금지 요청은 그대로입니다.
 - 설정 대조(2026-10-14): `aleph.config.json`은 `step` 10(빌드·배포 식별·점검 스크립트의 허용 목록에 10을 더함). `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소 `https://choi-bujang-secret-vault-tr33.vercel.app`, `judgeIssuer`·`identityProvider`·`originalApiUrl`은 9단계와 같음(바꾸지 않음). `allowedRoutes` 7개는 각각 실제 파일이 있고, `restoreRoute`는 `POST /api/restore`(`api/restore.js`). 복구 경로를 `allowedRoutes`에 넣지 않은 이유는 위 "10단계 제작 3"에 있습니다. `RULE_IDS`는 판정기의 다섯 규칙(`device_registered`, `step_up_required`, `note_zone_self`, `notice_zone_staff_only`, `route_unknown`)만이며 모두 구현했습니다. 판정기(`src/decider.mjs`)는 이번 단계에서 바꾸지 않았고, 계약의 요청 이름만 읽는지 `test/savepoint-10.test.mjs`가 소스를 검사합니다(계약 이름 18개는 `docs/DECIDER_REQUEST.md`에서 직접 읽고, `step_up`을 포함한 고정 시드 무작위 요청 3000건의 응답 형식도 검사).
-- `src/attack-check.mjs`의 10단계 점검: 9단계의 점검에 로그인 없는 `POST /api/restore`(없는 id, 거부 기대)를 더합니다. 로그인 없는 요청 한 번이며 상태 번호만 기록합니다. A가 B의 사본으로 복구하는 요청은 두 계정이 필요해 **미실행**으로 적습니다. 이 결과는 학생 자기 점검이며 심판의 판정이 아닙니다.
+- `src/attack-check.mjs`의 10단계 점검: 9단계의 점검에 로그인 없는 `POST /api/restore`(없는 id, 거부 기대)를 더합니다. 로그인 없는 요청 한 번이며 상태 번호만 기록합니다. **두 계정이 필요한 점검 4개(`other_owner_*`)와 anon 키 직접 점검 1개는 기본값이 미실행**입니다. 학생이 실행할 때 자기 터미널의 환경변수 `ATTACK_TOKEN_OWNER`(메모 주인 B의 로그인 토큰), `ATTACK_TOKEN_OTHER`(다른 계정 A의 로그인 토큰), `ATTACK_ANON_KEY`(공개 anon 키)를 넣으면 그 요청을 실제로 보냅니다. 값은 코드·Git·결과에 쓰지 않고 요청 머리글에만 쓰며, 결과에는 상태 번호와 짧은 오류 코드만 적습니다. 두 토큰이 같은 계정이거나 B에게 메모가 없으면 수정·삭제를 보내지 않고 "확인하지 못함"으로 적습니다. 이 결과는 학생 자기 점검이며 심판의 판정이 아닙니다. 방법은 아래 "점검 5개를 실제로 보내는 방법"에 있습니다.
 - **직접 확인할 것**:
   - 사전 백업을 다시 읽어 검증했는가? 코드는 복원 때마다 사본을 다시 읽어 ID·소유자·내용 해시를 대조하고, 맞지 않으면 409로 멈춥니다(가짜 DB 시험으로 확인). 정책 사본은 `policy:diff`가 sha256을 다시 계산해 검증합니다. 실제 Supabase에서는 학생이 사본 표를 만들고 저장된 해시가 다시 계산한 값과 같음을 확인했고, 복구 요청 두 번이 그 사본을 읽어 해시를 대조해 성공했습니다(위 실행 기록). 사본이 바뀐 경우의 409는 로컬 가짜 DB 시험으로만 확인했습니다.
   - 복구 뒤 정상 사용과 금지 요청을 재시험했는가? 복구 경로의 정상 사용(변조 뒤·삭제 뒤 복구)과 금지 요청(다른 계정의 복구 403)은 배포에서 학생이 확인했습니다. 1~9단계의 정상·금지 요청은 로컬 시험(가짜 DB·가상 요청)에서 다시 실행했고, 배포 서버에 직접 보내는 비로그인 요청(`npm run bundle`)과 두 계정의 읽기·수정·삭제 거부(403)는 학생이 배포에서 확인했습니다(위 실행 기록). 1~9단계의 모든 정상 요청(로그인한 사용자의 추가·수정·삭제 등)을 10단계 복구 뒤에 배포에서 전부 다시 눌러 본 것은 아닙니다. 순서는 위 "10단계 제작 4"에 있습니다.
-- **한계·미실행**: 이 코딩 도구 환경은 배포 주소에 접속하지 못해, 배포된 서버의 확인은 학생이 브라우저·터미널로 한 결과만 위 실행 기록에 적었습니다. 제출 묶음의 점검 19개 중 **5개는 미실행**으로 남습니다. (1) `anon_data_api_notes_refused`: 5단계부터 화면에 공개 키가 없어 점검 코드가 보내지 않으며, 심판이 anon 키로 직접 확인합니다. DB 권한은 위 실행 기록의 SQL 조회로 확인했습니다. (2) `other_owner_read/update/delete/restore`: 두 계정의 로그인이 필요한데 점검 코드는 비밀번호·토큰을 갖지 않게 두었습니다. 같은 요청은 학생이 직접 보내 모두 403임을 위 실행 기록에 남겼습니다.
+- **한계·미실행**: 이 코딩 도구 환경은 배포 주소에 접속하지 못해, 배포된 서버의 확인은 학생이 브라우저·터미널로 한 결과만 위 실행 기록에 적었습니다. 제출 묶음의 점검 19개 중 5개(`anon_data_api_notes_refused`, `other_owner_read/update/delete/restore`)는 **기본값이 미실행**입니다. 환경변수로 토큰·키를 넣고 `npm run bundle`을 실행하면 보냅니다(아래 방법). 넣지 않고 만든 묶음에서는 미실행으로 남으며, 그 경우에도 같은 요청을 학생이 직접 보내 확인한 결과를 위 실행 기록에 적었습니다.
 - **알려진 위험**: 복구 사본은 미리 만든 메모에 대해서만 있습니다(시험 계정 B의 메모 한 건). 심판이 자기 시험 계정의 메모를 새로 만들어 변조하는 방식이라면 사본이 없어 복구가 `404 BACKUP_NOT_FOUND`로 실패할 수 있습니다. 올려 준 제작 문구(비공개 가상 메모 사본에서 한 건 복원, 시험 계정 B의 메모로만 확인)와 AGENTS.md의 "요청한 변경 하나만 구현" 규칙에 따라 메모 작성 때 사본을 자동으로 만드는 기능은 넣지 않았습니다. 판정기가 `/restore` 경로를 `route_not_allowed`로 거부하는 것은 현재 계약·구역 표의 결과입니다. 이 저장소의 `docs/`·`package/`에는 운영 반 엔진이 복구 경로를 어떻게 부르는지(판정기를 거치는지) 설명이 없고, 제출 묶음의 `restoreRoute` 필드로만 전달됩니다. 그래서 **운영 측에 확인이 필요**하며, 답을 받기 전에는 판정기를 바꾸지 않았습니다. 실제 복구와 걸린 시간은 심판이 확인합니다.
 - 다시 실행: `npm ci`, `node --test test/*.mjs`, `npm run decider:test`, `npm run fixture:7`, `npm run detect:test`, `npm run policy:diff`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
+
+### 점검 5개를 실제로 보내는 방법 (선택, 학생이 자기 터미널에서만)
+
+토큰은 약 1시간 뒤 만료되므로 아래를 한 번에 끝냅니다. 값은 채팅·파일·Git에 붙여 넣지 않고, 터미널 창을 닫거나 마지막 줄로 지웁니다.
+
+1. 메모 주인 B로 로그인한 탭의 Console 입력칸에 `copy(JSON.parse(sessionStorage.getItem('vault.session')).access_token)`를 입력합니다(화면에 출력되지 않고 클립보드에만 복사됨). PowerShell에서 `$env:ATTACK_TOKEN_OWNER = (Get-Clipboard -Raw).Trim()`.
+2. 다른 계정 A로 로그인한 시크릿 창에서 같은 Console 줄을 실행하고 `$env:ATTACK_TOKEN_OTHER = (Get-Clipboard -Raw).Trim()`.
+3. Supabase의 프로젝트 설정 > API 키 화면에서 공개(publishable) 키를 복사하고 `$env:ATTACK_ANON_KEY = (Get-Clipboard -Raw).Trim()`. 서버 전용 키(secret, service_role)는 절대 쓰지 않습니다.
+4. `npm.cmd run bundle`(PowerShell 실행 정책 때문에 `npm` 대신 `npm.cmd`).
+5. 끝나면 `Remove-Item Env:ATTACK_TOKEN_OWNER, Env:ATTACK_TOKEN_OTHER, Env:ATTACK_ANON_KEY`.
+
+- 정상 결과: `other_owner_*` 4개가 `거부됨 (HTTP 403)`, `anon_data_api_notes_refused`가 `거부됨 (HTTP 401, 권한 없음 42501)`입니다. `거부되지 않음`이 나오면 큰 문제입니다.
+- 이 점검은 B의 메모에 다른 계정으로 `PUT`·`DELETE`를 실제로 보냅니다. 정상이면 403이라 바뀌지 않지만, 서버가 잘못되어 있으면 B의 시험 메모가 바뀌거나 지워질 수 있습니다(사본으로 복구 가능). 시험 계정과 가상 메모로만 하세요.
+
 
 ## 다음 단계의 코딩 도구에 전달할 규칙
 

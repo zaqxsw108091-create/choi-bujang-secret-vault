@@ -163,6 +163,9 @@ async function runStep3Checks(doFetch, app, marker) {
 //     이 파일은 보내지 않고 "미실행"으로 적습니다. 학생이 화면에서 직접 확인한 결과는 README에 따로 적습니다.
 // 5단계: 같은 점검이며, (1)의 직접 주소는 aleph.config.json의 originalApiUrl(쿼리 없는 원본 자료 경로)을 씁니다.
 // 상태 번호와 건수만 기록합니다. 심판의 판정이 아니라 학생의 자기 점검입니다.
+const ANON_KEY = /^(?:sb_publishable_[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})$/u;
+const LOGIN_TOKEN = /^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$/u;
+
 async function runStep4Checks(doFetch, app, config) {
   const results = await runStep3Checks(doFetch, app, config.sampleMarker);
   const id = 'anon_data_api_notes_refused';
@@ -174,7 +177,11 @@ async function runStep4Checks(doFetch, app, config) {
       : '/rest/v1/notes', new URL(config.identityProvider.issuer).origin);
     direct.search = '?select=id&limit=1';
     const page = await doFetch(new URL('/', app), { redirect: 'error', signal: AbortSignal.timeout(10000) });
-    const key = (await page.text()).match(/sb_publishable_[A-Za-z0-9_-]{8,}/u)?.[0];
+    // 화면에 공개 키가 없으면(5단계부터), 학생이 실행할 때 자기 터미널의 환경변수 ATTACK_ANON_KEY로 넣은 값만 씁니다.
+    // 값은 요청 머리글에만 쓰고 결과 문장에는 적지 않습니다. 환경변수가 없으면 아래처럼 미실행입니다.
+    const envKey = process.env.ATTACK_ANON_KEY;
+    const key = (await page.text()).match(/sb_publishable_[A-Za-z0-9_-]{8,}/u)?.[0]
+      ?? (typeof envKey === 'string' && ANON_KEY.test(envKey) ? envKey : undefined);
     if (!key && config.step >= 5) {
       // 5단계부터 화면에는 공개 키가 없습니다(키는 서버에만). 이 파일은 키를 갖지 않으므로 보내지 않습니다.
       results.push({ attackId: id, expected, observed: '미실행 (화면에 공개 키가 없어 이 파일은 보내지 않음. 원본 직접 요청은 심판이 anon 키로 확인)' });
@@ -223,21 +230,78 @@ async function runStep4Checks(doFetch, app, config) {
   }
   if (config.step >= 8) results.push(...await runStep8Checks(doFetch, app));
   if (config.step >= 10) results.push(...await runStep10Checks(doFetch, app));
-  for (const [attackId, what] of [['other_owner_read_refused', '남의 메모 읽기(GET /api/notes/:id)'],
-    ['other_owner_update_refused', '남의 메모 수정(PUT /api/notes/:id)'],
-    ['other_owner_delete_refused', '남의 메모 삭제(DELETE /api/notes/:id)']]) {
-    results.push({ attackId, expected: `로그인한 B가 A의 메모에 한 ${what}이 거부됨`,
-      observed: '미실행 (A·B 두 계정의 로그인이 필요해 이 파일은 보내지 않음. 화면 확인 결과는 README 참고)' });
+  results.push(...await runCrossOwnerChecks(doFetch, app, config.step));
+  return results;
+}
+
+// 두 계정이 필요한 점검(4단계부터, 10단계에는 복구 요청 포함). 학생이 실행할 때 자기 터미널의 환경변수
+// ATTACK_TOKEN_OWNER(메모 주인 B의 로그인 토큰)와 ATTACK_TOKEN_OTHER(다른 계정 A의 로그인 토큰)를 넣었을 때만 보냅니다.
+// 토큰 값은 코드·Git·결과에 쓰지 않고 요청 머리글에만 쓰며, 결과에는 상태 번호와 짧은 오류 코드만 적습니다.
+// 환경변수가 없거나 모양이 틀리면 이전과 같은 문구로 미실행입니다. 심판의 판정이 아닙니다.
+async function runCrossOwnerChecks(doFetch, app, step) {
+  const unrun = '미실행 (A·B 두 계정의 로그인이 필요해 이 파일은 보내지 않음. 화면 확인 결과는 README 참고)';
+  const unrunRestore = '미실행 (A·B 두 계정의 로그인과 B의 비공개 사본이 필요해 이 파일은 보내지 않음. 화면 확인 결과는 README 참고)';
+  const json = { title: 'x', body: 'y' };
+  const defs = [
+    { attackId: 'other_owner_read_refused', unrun, expected: '로그인한 B가 A의 메모에 한 남의 메모 읽기(GET /api/notes/:id)이 거부됨',
+      send: (call, id) => call('GET', `/api/notes/${id}`) },
+    { attackId: 'other_owner_update_refused', unrun, expected: '로그인한 B가 A의 메모에 한 남의 메모 수정(PUT /api/notes/:id)이 거부됨',
+      send: (call, id) => call('PUT', `/api/notes/${id}`, json) },
+    { attackId: 'other_owner_delete_refused', unrun, expected: '로그인한 B가 A의 메모에 한 남의 메모 삭제(DELETE /api/notes/:id)이 거부됨',
+      send: (call, id) => call('DELETE', `/api/notes/${id}`) },
+  ];
+  if (step >= 10) {
+    defs.push({ attackId: 'other_owner_restore_refused', unrun: unrunRestore,
+      expected: '로그인한 A가 B의 사본으로 POST /api/restore를 보내면 거부됨(403)',
+      send: (call, id) => call('POST', '/api/restore', { id }) });
   }
-  if (config.step >= 10) {
-    results.push({ attackId: 'other_owner_restore_refused', expected: '로그인한 A가 B의 사본으로 POST /api/restore를 보내면 거부됨(403)',
-      observed: '미실행 (A·B 두 계정의 로그인과 B의 비공개 사본이 필요해 이 파일은 보내지 않음. 화면 확인 결과는 README 참고)' });
+  const all = (observed) => defs.map(({ attackId, expected }) => ({ attackId, expected, observed }));
+  const owner = process.env.ATTACK_TOKEN_OWNER;
+  const other = process.env.ATTACK_TOKEN_OTHER;
+  if (typeof owner !== 'string' || typeof other !== 'string' || !LOGIN_TOKEN.test(owner) || !LOGIN_TOKEN.test(other)) {
+    return defs.map(({ attackId, expected, unrun: observed }) => ({ attackId, expected, observed }));
+  }
+  const call = (token, method, path, body) => doFetch(new URL(path, app), {
+    method, redirect: 'error', signal: AbortSignal.timeout(10000),
+    headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  let target;
+  try {
+    // 대상: B(주인) 목록의 첫 메모 id. A 목록에 같은 id가 있으면 같은 계정이므로 보내지 않습니다(PUT·DELETE가 실제로 바꾸지 않게).
+    const mine = await call(owner, 'GET', '/api/notes');
+    const mineList = mine.ok ? await mine.json() : null;
+    target = Array.isArray(mineList) && typeof mineList[0]?.id === 'string' ? mineList[0].id : null;
+    if (!target) return all(`확인하지 못함 (B 계정의 메모 목록을 읽지 못함: HTTP ${mine.status})`);
+    const theirs = await call(other, 'GET', '/api/notes');
+    const theirList = theirs.ok ? await theirs.json() : null;
+    if (!Array.isArray(theirList)) return all(`확인하지 못함 (A 계정의 메모 목록을 읽지 못함: HTTP ${theirs.status})`);
+    if (theirList.some(note => note?.id === target)) return all('확인하지 못함 (두 토큰이 같은 계정으로 보여 보내지 않음)');
+  } catch {
+    return all('확인하지 못함 (요청을 보내지 못함)');
+  }
+  const results = [];
+  for (const { attackId, expected, send } of defs) {
+    try {
+      const response = await send((...args) => call(other, ...args), target);
+      let code = null;
+      try {
+        const data = JSON.parse(await response.text());
+        if (typeof data?.error === 'string' && /^[A-Z_]{1,40}$/u.test(data.error)) code = data.error;
+      } catch { /* JSON이 아니면 앱의 응답으로 보지 않습니다. */ }
+      results.push({ attackId, expected,
+        observed: response.status === 403 && code === 'FORBIDDEN' ? '거부됨 (HTTP 403)'
+          : response.ok ? `거부되지 않음 (HTTP ${response.status})`
+            : `확인하지 못함 또는 예상 밖 (HTTP ${response.status}${code ? `, ${code}` : ''})` });
+    } catch {
+      results.push({ attackId, expected, observed: '확인하지 못함 (요청을 보내지 못함)' });
+    }
   }
   return results;
 }
 
 // 10단계: 복구 경로 POST /api/restore를 로그인 없이 보냅니다(없는 id). 거부되어야 하며 자료·사본·감사 기록이 생기거나 바뀌지 않습니다.
-// 상태 번호와 오류 코드만 기록합니다. 로그인한 복구와 다른 계정의 복구 요청은 보내지 않습니다. 심판의 판정이 아닙니다.
+// 상태 번호와 오류 코드만 기록합니다. 로그인한 사용자의 복구는 보내지 않고, 다른 계정의 복구 요청은 위 runCrossOwnerChecks가 맡습니다. 심판의 판정이 아닙니다.
 async function runStep10Checks(doFetch, app) {
   const attackId = 'anonymous_restore_refused';
   const expected = '로그인 없는 POST /api/restore가 거부됨(없는 id로 보냄)';

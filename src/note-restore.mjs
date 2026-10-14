@@ -76,6 +76,13 @@ const changedFields = (live, backup) => (!live ? ['create']
 const evidence = (backup, changes) => ({ contentSha256: backup.content_sha256, restoreVersion: backup.content_sha256.slice(0, 12), changes, backupVerified: true, verified: true });
 
 export async function restoreOneNote({ supabase, userId, id, expect = {} }) {
+  // 감사 기록(이 메모의 기록)을 읽기만 합니다. 실패하면 null(증거만 비고, 복구는 그대로).
+  const readAudit = async () => {
+    try {
+      const { data, error } = await supabase.from('notes_restore_audit').select('id, event, at').eq('note_id', id);
+      return error || !Array.isArray(data) ? null : data;
+    } catch { return null; }
+  };
   const audit = async (event, contentSha256 = null) => supabase.from('notes_restore_audit')
     .insert({ note_id: id, actor_id: userId, event, content_sha256: contentSha256 });
 
@@ -113,9 +120,12 @@ export async function restoreOneNote({ supabase, userId, id, expect = {} }) {
     const peek = await supabase.from('notes').select('id, owner_id, title, content').eq('id', id).maybeSingle();
     if (peek.error) return dbFailure('미리보기 읽기', peek.error);
     if (peek.data && peek.data.owner_id !== userId) return fail(409, 'OWNER_CONFLICT', 'owner_conflict');
-    return { status: 200, body: { id, planned: true, restored: false, action: 'plan', ...evidence(backup, changedFields(peek.data, backup)) } };
+    const before = await readAudit();
+    return { status: 200, body: { id, planned: true, restored: false, action: 'plan', ...evidence(backup, changedFields(peek.data, backup)),
+      audit: { recorded: false, priorEntries: before ? before.length : null } } };
   }
   // 3) 앞 감사 기록. 쓰지 못하면 메모를 바꾸지 않습니다.
+  const prior = await readAudit();
   const first = await audit('requested', wanted);
   if (first.error) return { status: 503, body: { error: 'AUDIT_UNAVAILABLE' }, failure: `감사 기록:${first.error.code ?? 'unknown'}` };
 
@@ -154,7 +164,11 @@ export async function restoreOneNote({ supabase, userId, id, expect = {} }) {
   }
   const last = await audit(action, wanted);
   if (last.error) return { status: 500, body: { error: 'RESTORE_AUDIT_FAILED' }, failure: `감사 기록:${last.error.code ?? 'unknown'}` };
-  return { status: 200, body: { id, restored: action !== 'unchanged', action, ...evidence(backup, action === 'unchanged' ? [] : changes) } };
+  // 감사 기록 증거: 이전 기록은 그대로 두고 이번 요청·결과 두 줄이 덧붙었음을 보여 줍니다(읽기 전용).
+  const trail = await readAudit();
+  const auditEvidence = { recorded: true, priorEntries: prior ? prior.length : null, entries: trail ? trail.length : null,
+    events: trail ? trail.slice(-5).map(entry => entry.event) : [], preserved: prior && trail ? trail.length >= prior.length + 2 : true };
+  return { status: 200, body: { id, restored: action !== 'unchanged', action, ...evidence(backup, action === 'unchanged' ? [] : changes), audit: auditEvidence, auditRecorded: true } };
 }
 
 // 자동 사본: 메모를 만들 때, 그리고 사본이 없는 메모를 처음 고치거나 지울 때 "바뀌기 직전의 원래 상태"를 notes_backup에 저장합니다.

@@ -1,0 +1,31 @@
+{
+  "schema": "aleph.policy-snapshot.v1",
+  "version": "step9-2026-10-14",
+  "policy": {
+    "allowedRoutes": [
+      "DELETE /api/notes/:id",
+      "GET /api/notes",
+      "GET /api/notes/:id",
+      "POST /api/login",
+      "POST /api/notes",
+      "POST /api/refresh",
+      "PUT /api/notes/:id"
+    ],
+    "ruleIds": [
+      "device_registered",
+      "note_zone_self",
+      "notice_zone_staff_only",
+      "route_unknown",
+      "step_up_required"
+    ],
+    "securityHeaders": [
+      "/(.*) X-Content-Type-Options: nosniff"
+    ],
+    "identityProvider": {
+      "issuer": "https://vskaxngivuhucmbnoagz.supabase.co/auth/v1",
+      "audience": "authenticated"
+    },
+    "originalApiUrl": "https://vskaxngivuhucmbnoagz.supabase.co/rest/v1/notes"
+  },
+  "sha256": "03d9d1d57334048cb3aebd3db2a0fa42a6ecde1f9b700315a91da0ac21ed843b"
+}

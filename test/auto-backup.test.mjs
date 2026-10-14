@@ -307,3 +307,15 @@ test('서버에 사본이 없으면, 요청에 사본을 실어 보내도 그것
   assert.deepEqual([result.status, result.body], [404, { error: 'BACKUP_NOT_FOUND' }]);
   assert.equal(liveOf(db, id).title, '지금 제목');
 });
+
+test('복구 응답의 감사 기록 증거: 이전 기록은 보존되고 요청·결과가 덧붙으며, 미리보기는 기록을 만들지 않는다', async () => {
+  const { db, a, id } = await tampered();
+  db.tables.notes_restore_audit.push({ id: 900, note_id: id, actor_id: B, event: 'older_entry', at: 'x' });
+  const plan = await a.restoreWith(B, { id, dryRun: true });
+  assert.deepEqual([plan.body.audit.recorded, plan.body.audit.priorEntries], [false, 1]);
+  assert.equal(db.tables.notes_restore_audit.length, 1, '미리보기는 기록을 쓰지 않음');
+  const done = await a.restoreWith(B, { id });
+  assert.deepEqual([done.body.audit.recorded, done.body.audit.priorEntries, done.body.audit.entries, done.body.audit.preserved], [true, 1, 3, true]);
+  assert.equal(db.tables.notes_restore_audit[0].event, 'older_entry', '이전 기록은 그대로');
+  assert.deepEqual(db.tables.notes_restore_audit.slice(1).map(r => r.event), ['requested', 'updated']);
+});

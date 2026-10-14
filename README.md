@@ -381,10 +381,14 @@
 | 7단계 가상 사건 | `npm run fixture:7` (2026-10-14) | 정상 사건 `allow`, 복합 이상 사건 `step_up` | 실행함 |
 | 9단계 가상 사건 | `npm run detect:test` (2026-10-14) | 가상 사건 사례 6개가 모두 통과로 표시됨, 실패 줄 없음(실제 회수 아님) | 실행함 |
 | 비밀값 검사 | `npm run check:secrets` (2026-10-14) | Git 추적 파일 83개에서 키처럼 보이는 문자열 없음 | 실행함 |
-| 실제 Supabase 복구(순서 3) | B 로그인으로 `POST /api/restore`, SQL [D-1]과 해시 대조 | — | **미실행** |
+| 배포가 10단계인지 | 배포 주소의 `/aleph.json`을 브라우저로 엶 | `step` 10, 커밋 `5772af5`(PR 42 병합 커밋), `allowedRoutes` 7개. `publicAppUrl`은 이번 배포의 임시 주소로 나옴(8단계 기록과 같은 원래 동작) | 학생이 확인함 (2026-10-14) |
+| Supabase 사본 표 | SQL Editor에서 `sql/10-notes-backup.sql`의 [A]·[B] 실행, 사본 만들기, 확인 질의 | [A] `hash_matches_code` true, [B] 성공, 사본 1건에서 저장된 해시가 다시 계산한 값과 같음(`hash_ok` true), anon·authenticated의 두 표 접근 false, 서버 역할의 감사 표 수정·삭제 false. 사본은 `[C]`에서 메모 id 줄만 뺀 같은 문장(이메일로 고름)으로 만들었고, 새로 만든 시험 계정 B의 메모 1건임. 확인 질의는 [D]를 합쳐 쓴 것임 | 학생이 확인함 (2026-10-14) |
+| 변조 뒤 복구 | 시험 계정 B 화면에서 제목을 수정한 뒤 Console에서 `POST /api/restore` | `200`, `action: updated`, `verified: true`, `contentSha256` 앞 8글자 `c844e33a`(사본과 같음). 새로고침 뒤 제목이 원래대로 돌아옴 | 학생이 확인함 (2026-10-14) |
+| 삭제 뒤 복구 | 같은 메모를 삭제한 뒤 같은 요청 | `200`, `action: inserted`, 삭제 전에 저장한 id와 같은 id, `verified: true`. 새로고침 뒤 카드가 돌아옴 | 학생이 확인함 (2026-10-14) |
+| 복구 감사 기록 | SQL Editor에서 `notes_restore_audit`의 시각·`event`·해시 앞 8글자만 조회 | 4행: `requested`, `updated`, `requested`, `inserted`, 해시 앞 8글자 모두 `c844e33a` | 학생이 확인함 (2026-10-14) |
+| 다른 계정의 복구 요청 | 다른 시험 계정으로 시크릿 창에서 로그인해, B 메모 id로 `POST /api/restore` | `403 {"error":"FORBIDDEN"}`. 이 요청 뒤 감사 기록 행 수를 다시 세는 확인은 하지 않음 | 학생이 확인함 (2026-10-14) |
 | 배포된 서버에 직접 보내는 요청(순서 5) | `npm run bundle` | — (코딩 도구 환경은 배포 주소에 접속하지 못함) | **미실행** |
-| 두 계정 교차 요청(4·8단계) | A·B 로그인 후 Console | — | **미실행** |
-| 배포가 복구 뒤 상태인지 | 배포 주소의 `/aleph.json` 확인 | — | **미실행** |
+| 다른 계정의 읽기·수정·삭제(4·8단계) | A·B 로그인 후 Console | — | **미실행** |
 
 - **알려진 한계(저장점에서 해결)**: 이 절을 쓸 때 `src/attack-check.mjs`는 `step` 10을 몰랐습니다. 10단계 저장점에서 `step` 10을 받아들이고 로그인 없는 `POST /api/restore` 점검을 더했습니다(아래 "10단계 저장점").
 - 복구 뒤 시험이 통과해도 운영 반 엔진의 사건 전달·접속 회수나 실제 심판의 복구 판정이 연결되었다는 뜻이 아닙니다.
@@ -395,9 +399,9 @@
 - 설정 대조(2026-10-14): `aleph.config.json`은 `step` 10(빌드·배포 식별·점검 스크립트의 허용 목록에 10을 더함). `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 실제 배포 주소 `https://choi-bujang-secret-vault-tr33.vercel.app`, `judgeIssuer`·`identityProvider`·`originalApiUrl`은 9단계와 같음(바꾸지 않음). `allowedRoutes` 7개는 각각 실제 파일이 있고, `restoreRoute`는 `POST /api/restore`(`api/restore.js`). 복구 경로를 `allowedRoutes`에 넣지 않은 이유는 위 "10단계 제작 3"에 있습니다. `RULE_IDS`는 판정기의 다섯 규칙(`device_registered`, `step_up_required`, `note_zone_self`, `notice_zone_staff_only`, `route_unknown`)만이며 모두 구현했습니다. 판정기(`src/decider.mjs`)는 이번 단계에서 바꾸지 않았고, 계약의 요청 이름만 읽는지 `test/savepoint-10.test.mjs`가 소스를 검사합니다(계약 이름 18개는 `docs/DECIDER_REQUEST.md`에서 직접 읽고, `step_up`을 포함한 고정 시드 무작위 요청 3000건의 응답 형식도 검사).
 - `src/attack-check.mjs`의 10단계 점검: 9단계의 점검에 로그인 없는 `POST /api/restore`(없는 id, 거부 기대)를 더합니다. 로그인 없는 요청 한 번이며 상태 번호만 기록합니다. A가 B의 사본으로 복구하는 요청은 두 계정이 필요해 **미실행**으로 적습니다. 이 결과는 학생 자기 점검이며 심판의 판정이 아닙니다.
 - **직접 확인할 것**:
-  - 사전 백업을 다시 읽어 검증했는가? 코드는 복원 때마다 사본을 다시 읽어 ID·소유자·내용 해시를 대조하고, 맞지 않으면 409로 멈춥니다(가짜 DB 시험으로 확인). 정책 사본은 `policy:diff`가 sha256을 다시 계산해 검증합니다. **실제 Supabase의 사본 표를 만들고 읽어 본 확인은 미실행**입니다(`sql/10-notes-backup.sql`의 [A]·[D]를 학생이 실행).
-  - 복구 뒤 정상 사용과 금지 요청을 재시험했는가? 로컬 시험(가짜 DB·가상 요청)에서는 했습니다. **배포된 서버와 두 계정으로 한 재시험은 미실행**이며, 순서는 위 "10단계 제작 4"에 있습니다.
-- **한계·미실행**: 배포 주소에 접속하지 못해 배포된 서버의 응답을 확인하지 못했습니다. 판정기가 `/restore` 경로를 `route_not_allowed`로 거부하는 것은 현재 계약·구역 표의 결과입니다. 이 저장소의 `docs/`·`package/`에는 운영 반 엔진이 복구 경로를 어떻게 부르는지(판정기를 거치는지) 설명이 없고, 제출 묶음의 `restoreRoute` 필드로만 전달됩니다. 그래서 **운영 측에 확인이 필요**하며, 답을 받기 전에는 판정기를 바꾸지 않았습니다. 실제 복구와 걸린 시간은 심판이 확인합니다.
+  - 사전 백업을 다시 읽어 검증했는가? 코드는 복원 때마다 사본을 다시 읽어 ID·소유자·내용 해시를 대조하고, 맞지 않으면 409로 멈춥니다(가짜 DB 시험으로 확인). 정책 사본은 `policy:diff`가 sha256을 다시 계산해 검증합니다. 실제 Supabase에서는 학생이 사본 표를 만들고 저장된 해시가 다시 계산한 값과 같음을 확인했고, 복구 요청 두 번이 그 사본을 읽어 해시를 대조해 성공했습니다(위 실행 기록). 사본이 바뀐 경우의 409는 로컬 가짜 DB 시험으로만 확인했습니다.
+  - 복구 뒤 정상 사용과 금지 요청을 재시험했는가? 복구 경로의 정상 사용(변조 뒤·삭제 뒤 복구)과 금지 요청(다른 계정의 복구 403)은 배포에서 학생이 확인했습니다. 1~9단계 전체의 정상·금지 요청은 로컬 시험(가짜 DB·가상 요청)에서만 다시 실행했고, **배포 서버에 직접 보내는 요청(`npm run bundle`)과 두 계정의 읽기·수정·삭제 재시험은 미실행**입니다. 순서는 위 "10단계 제작 4"에 있습니다.
+- **한계·미실행**: 이 코딩 도구 환경은 배포 주소에 접속하지 못해, 배포된 서버의 확인은 학생이 브라우저로 한 결과만 위 실행 기록에 적었습니다. 판정기가 `/restore` 경로를 `route_not_allowed`로 거부하는 것은 현재 계약·구역 표의 결과입니다. 이 저장소의 `docs/`·`package/`에는 운영 반 엔진이 복구 경로를 어떻게 부르는지(판정기를 거치는지) 설명이 없고, 제출 묶음의 `restoreRoute` 필드로만 전달됩니다. 그래서 **운영 측에 확인이 필요**하며, 답을 받기 전에는 판정기를 바꾸지 않았습니다. 실제 복구와 걸린 시간은 심판이 확인합니다.
 - 다시 실행: `npm ci`, `node --test test/*.mjs`, `npm run decider:test`, `npm run fixture:7`, `npm run detect:test`, `npm run policy:diff`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
 
 ## 다음 단계의 코딩 도구에 전달할 규칙

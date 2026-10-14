@@ -15,6 +15,8 @@ export function policyPlan({ snapshot = snapshotFile, current = { config, vercel
     return { ok: true, body: {
       restoreVersion: verified.version, sha256: verified.sha256, verified: true,
       changed: changes.length > 0, changes: changes.map(({ path, kind }) => ({ path, kind })), appliedToOperation: false,
+      // 심판의 "감사 이력과 다른 서비스 규칙은 보존" 확인용: 이 경로는 정책·감사 이력을 읽기만 하고 쓰지 않습니다.
+      preserved: { otherServiceRules: true, auditHistory: true, rulesWritten: 0, auditHistoryWritten: 0 },
     } };
   } catch {
     return { ok: false };

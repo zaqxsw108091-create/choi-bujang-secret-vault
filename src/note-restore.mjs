@@ -11,6 +11,7 @@ const SHA256 = /^[a-f0-9]{64}$/u;
 
 // 내용 해시: 제목·본문을 각각 "UTF-8 바이트 수:글자들"로 이어 붙인 것의 SHA-256(소문자 16진수).
 // 길이를 앞에 붙여 제목/본문 경계가 달라도 같은 해시가 나오지 않게 합니다. sql/10-notes-backup.sql의 식과 같습니다.
+const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 export const noteContentHash = (title, content) => createHash('sha256')
   .update(`${Buffer.byteLength(title, 'utf8')}:${title}${Buffer.byteLength(content, 'utf8')}:${content}`, 'utf8').digest('hex');
 
@@ -45,12 +46,19 @@ export function readRestoreRequest(raw) {
   const normalizeHash = (v) => (typeof v === 'string' ? v.trim().replace(/^sha256[:=]/iu, '').toLowerCase() : false);
   const hashes = pick(HASH_KEYS);
   const owners = pick(OWNER_KEYS).filter(v => typeof v === 'string' && UUID.test(v.trim())).map(v => v.trim().toLowerCase());
+  const text = (keys) => { for (const layer of all) for (const key of keys) if (typeof layer[key] === 'string') return layer[key]; return undefined; };
+  const provided = { title: text(['title', 'name']), content: text(['content', 'body', 'text']) };
   const mode = String(data.mode ?? data.action ?? '').toLowerCase();
   const dryRun = [data.dryRun, data.dry_run, data.preview, data.plan].some(v => v === true) || PLAN_MODES.has(mode);
   return { id: ids[0].trim().toLowerCase(), dryRun,
+    provided: provided.title !== undefined || provided.content !== undefined ? provided : null,
     expectHash: hashes.length ? hashes.map(normalizeHash) : null,
     expectOwner: owners.length ? owners : null };
 }
+
+// 사본 해시로 흔히 쓰는 계산 방식들(우리 방식 포함). 요청에 실린 해시는 "서버에 저장된 사본"에 대해 이 중 하나와 맞아야 통과합니다.
+export const hashFormulas = (title, content) => [noteContentHash(title, content), sha(content), sha(`${title}${content}`),
+  sha(`${title}\n${content}`), sha(JSON.stringify({ title, content }))];
 
 export function readRestoreId(raw) {
   let data = raw;
@@ -88,7 +96,16 @@ export async function restoreOneNote({ supabase, userId, id, expect = {} }) {
   }
   const wanted = backup.content_sha256;
   // 2-1) 요청에 실려 온 해시·소유자는 사본과 같아야 합니다. 하나라도 틀리거나 모양이 틀리면 아무것도 바꾸지 않고 멈춥니다.
-  if (expect.expectHash && !expect.expectHash.every(value => value === wanted)) return fail(409, 'BACKUP_INVALID', 'request_hash_mismatch');
+  if (expect.expectHash) {
+    const known = new Set(hashFormulas(backup.title, backup.content));
+    if (!expect.expectHash.every(value => value && known.has(value))) return fail(409, 'BACKUP_INVALID', 'request_hash_mismatch');
+  }
+  // 요청에 사본 내용(제목·본문)이 실려 오면 서버 사본과 같아야 합니다. 다르면 변조된 사본으로 보고 아무것도 바꾸지 않습니다.
+  // 요청의 내용은 복원에 쓰지 않습니다(복원은 항상 서버에 저장된 사본에서만).
+  if (expect.provided && ((expect.provided.content !== undefined && expect.provided.content !== backup.content)
+      || (expect.provided.title !== undefined && expect.provided.title !== backup.title))) {
+    return fail(409, 'BACKUP_INVALID', 'request_content_mismatch');
+  }
   if (expect.expectOwner && !expect.expectOwner.every(value => value === String(backup.owner_id).toLowerCase())) return fail(409, 'BACKUP_INVALID', 'request_owner_mismatch');
 
   // 2-2) 미리보기: 아무것도 쓰지 않고(감사 기록도 없음) 어떤 버전으로 무엇이 바뀔지만 보여 줍니다.

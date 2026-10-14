@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createNotesApi } from '../src/notes-api.mjs';
 import { createLoginVerifier } from '../src/verify-login.mjs';
-import { noteContentHash } from '../src/note-restore.mjs';
+import { hashFormulas, noteContentHash } from '../src/note-restore.mjs';
 
 const config = JSON.parse(readFileSync(new URL('../aleph.config.json', import.meta.url), 'utf8'));
 const B = '22222222-2222-4222-8222-222222222222';
@@ -272,4 +272,38 @@ test('id를 memoId·targetId·resourceId로 보내거나, 본문 없이 ?id= 또
   assert.equal((await viaPath.a.restoreAt(B, viaPath.id, `/api/restore/${viaPath.id}`)).status, 200);
   const none = await tampered();
   assert.equal((await none.a.restoreWith(B, {})).status, 400);
+});
+
+test('해시는 흔한 계산 방식(내용만 sha256 등) 중 하나로 서버 사본과 맞으면 통과하고, 어느 것에도 안 맞으면 멈춘다', async () => {
+  for (const index of [0, 1, 2, 3, 4]) {
+    const { db, a, id } = await tampered();
+    const hash = hashFormulas('원래 제목', '원래 본문')[index];
+    const result = await a.restoreWith(B, { id, contentSha256: hash });
+    assert.equal(result.status, 200, `공식 ${index}`);
+    assert.equal(liveOf(db, id).title, '원래 제목');
+  }
+  const { db, a, id } = await tampered();
+  assert.equal((await a.restoreWith(B, { id, hash: hashFormulas('변조됨', '변조 본문')[1] })).status, 409);
+  assert.equal(liveOf(db, id).title, '변조됨');
+});
+
+test('요청에 실린 제목·본문이 서버 사본과 같으면 통과하고 다르면(변조된 사본) 멈추며, 복원에는 쓰지 않는다', async () => {
+  const { db, a, id, hash } = await tampered();
+  const before = JSON.stringify(db.tables);
+  assert.equal((await a.restoreWith(B, { id, backup: { title: '원래 제목', content: '조작된 본문', contentSha256: hash } })).status, 409);
+  assert.equal((await a.restoreWith(B, { id, title: '조작', content: '원래 본문' })).status, 409);
+  assert.equal(JSON.stringify(db.tables), before);
+  const same = await a.restoreWith(B, { id, backup: { title: '원래 제목', content: '원래 본문', sha256: hashFormulas('원래 제목', '원래 본문')[1] } });
+  assert.equal(same.status, 200);
+  assert.deepEqual([liveOf(db, id).title, liveOf(db, id).content], ['원래 제목', '원래 본문']);
+});
+
+test('서버에 사본이 없으면, 요청에 사본을 실어 보내도 그것으로 복원하지 않는다(404)', async () => {
+  const db = world(); const a = api(db);
+  const id = randomUUID();
+  db.tables.notes.push({ id, owner_id: B, title: '지금 제목', content: '지금 본문' });
+  const content = '내가 만든 본문';
+  const result = await a.restoreWith(B, { id, title: '내 제목', content, contentSha256: hashFormulas('내 제목', content)[1] });
+  assert.deepEqual([result.status, result.body], [404, { error: 'BACKUP_NOT_FOUND' }]);
+  assert.equal(liveOf(db, id).title, '지금 제목');
 });

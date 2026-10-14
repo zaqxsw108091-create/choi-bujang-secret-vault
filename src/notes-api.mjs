@@ -17,6 +17,7 @@ import { clientIp, findBlock, loadBlockRules } from './xdr-block.mjs';
 import { defaultBlockLookup } from './xdr-store.mjs';
 import { backupBeforeChange, bodyKeys, keepBackup, readRestoreRequest, restoreOneNote } from './note-restore.mjs';
 import { policyPlan } from './policy-plan.mjs';
+import { createDeviceGate, deviceRequest } from './device-gate.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const MAX_TITLE = 200;
@@ -54,9 +55,11 @@ function idFromRequest(request) {
   try { return new URL(request.url, 'http://local').pathname.split('/').filter(Boolean).pop() ?? null; } catch { return null; }
 }
 
-export function createNotesApi({ getVerifier, getSupabase, getPolicyPlan = policyPlan, getBlockRules = () => [], lookupBlock = async () => null, now = () => Date.now() }) {
-  // 모든 요청의 공통 앞부분: 허용 방법 → 서버 설정 → 로그인 확인. 통과한 요청만 handle로 갑니다.
-  const guarded = (allowed, handle) => async (request, response) => {
+export function createNotesApi({ getVerifier, getSupabase, getPolicyPlan = policyPlan, getBlockRules = () => [], lookupBlock = async () => null, now = () => Date.now(), deviceGate = null }) {
+  // 모든 요청의 공통 앞부분: 허용 방법 → 서버 설정 → 로그인 확인 → (11단계) 기기 확인. 통과한 요청만 handle로 갑니다.
+  // deviceGate가 없으면 기기 확인을 하지 않습니다(시험용). 운영용 notesApi는 항상 deviceGate를 겁니다.
+  // needsDevice=false는 기기 승인 요청 경로뿐입니다(아직 승인 전인 기기가 요청을 보내야 하므로).
+  const guarded = (allowed, handle, { needsDevice = true } = {}) => async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     if (!allowed.includes(request.method)) {
       response.setHeader('Allow', allowed.join(', '));
@@ -82,6 +85,11 @@ export function createNotesApi({ getVerifier, getSupabase, getPolicyPlan = polic
         // 토큰 없음·위조·만료·다른 서비스용은 모두 같은 응답입니다.
         response.setHeader('WWW-Authenticate', 'Bearer');
         return deny(response, 401, 'LOGIN_REQUIRED', 'login_required');
+      }
+      // 11단계: 로그인한 뒤, 이 기기가 서버에 등록(승인)된 기기이고 요청이 그 기기의 서명을 가졌는지 봅니다. 실패하면 자료를 읽기 전에 멈춥니다.
+      if (needsDevice && deviceGate) {
+        const device = await deviceGate({ request, supabase, userId: login.userId });
+        if (!device.ok) return deny(response, device.status, device.error, device.reason);
       }
       // 8단계: 로그인을 통과한 요청에 경로로 정한 자원 ID(note:…)를 붙입니다. 판단에는 아직 쓰지 않습니다.
       const resourceId = resourceIdOf(request.url ?? '');
@@ -187,7 +195,11 @@ export function createNotesApi({ getVerifier, getSupabase, getPolicyPlan = polic
     return response.status(result.status).json(result.body);
   });
 
-  return { collection, item, restore };
+  // GET·POST /api/device (11단계): 기기 승인 요청과 내 기기 상태. 로그인은 필요하지만 기기 증명은 요구하지 않고, 어떤 자료도 돌려주지 않습니다.
+  const device = guarded(['GET', 'POST'], ({ request, response, supabase, userId }) =>
+    deviceRequest({ request, response, supabase, userId, deny }), { needsDevice: false });
+
+  return { collection, item, restore, device };
 }
 
 // 서버 런타임에서 한 번만 만듭니다. 환경변수가 없으면 만들지 않고 던집니다.
@@ -214,4 +226,5 @@ export const notesApi = createNotesApi({
   },
   getBlockRules: () => loadBlockRules(),
   lookupBlock: defaultBlockLookup,
+  deviceGate: createDeviceGate(),
 });

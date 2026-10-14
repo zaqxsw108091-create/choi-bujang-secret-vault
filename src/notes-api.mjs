@@ -166,7 +166,12 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
   const restore = guarded(['POST'], async ({ request, response, supabase, userId }) => {
     // 심판·클라이언트가 실제로 보낸 필드 이름만 남깁니다(값은 남기지 않음).
     console.info(`notes 복구 요청 필드: ${bodyKeys(request.body).join(',') || '(없음)'}`);
-    const parsed = readRestoreRequest(request.body);
+    let parsed = readRestoreRequest(request.body);
+    if (!parsed) {
+      // 본문에 id가 없으면 주소에서 읽습니다: /api/restore?id=<UUID> 또는 /api/restore/<UUID>
+      const fromUrl = idFromRequest(request);
+      if (typeof fromUrl === 'string' && UUID.test(fromUrl)) parsed = { id: fromUrl.toLowerCase(), dryRun: false, expectHash: null, expectOwner: null };
+    }
     if (!parsed) return response.status(400).json({ error: 'INVALID_BODY' });
     const result = await restoreOneNote({ supabase, userId, id: parsed.id, expect: parsed });
     if (result.failure) console.error(`notes 복구 실패 ${result.failure}`);

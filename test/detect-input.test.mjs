@@ -30,6 +30,21 @@ test('배열이 아니면 invalid_detection_events 오류', () => {
   assert.throws(() => readEvents(undefined), { message: 'invalid_detection_events' });
 });
 
-test('이번 단계에서는 판정이 그대로 observe', () => {
-  assert.deepEqual(detect([{ at, method: 'GET', identity: { sub: 'a' } }]), { action: 'observe' });
+const reads = (n, { sub = 'a', gap = 2000, method = 'GET' } = {}) =>
+  Array.from({ length: n }, (_, i) => ({
+    at: new Date(Date.parse(at) + i * gap).toISOString(), method, identity: { sub } }));
+
+test('burst_read: 120건은 관찰, 121건은 회수 제안', () => {
+  assert.deepEqual(detect(reads(120)), { action: 'observe' });
+  assert.deepEqual(detect(reads(121)), { action: 'propose_revocation', reasonCode: 'burst_read', subject: 'a' });
+});
+
+test('burst_read: 다른 사용자 합산·10분 밖·GET 아닌 사건은 세지 않는다', () => {
+  assert.deepEqual(detect([...reads(100), ...reads(100, { sub: 'b' })]), { action: 'observe' });
+  assert.deepEqual(detect(reads(200, { gap: 7000 })), { action: 'observe' });
+  assert.deepEqual(detect(reads(200, { method: 'POST' })), { action: 'observe' });
+});
+
+test('burst_read: 뒤섞인 순서도 구간으로 센다', () => {
+  assert.equal(detect(reads(130).reverse()).action, 'propose_revocation');
 });

@@ -21,7 +21,29 @@ export function readEvents(events) {
   return { events: readable, skipped };
 }
 
+export const BURST_WINDOW_MS = 10 * 60 * 1000;
+export const BURST_LIMIT = 120;
+
+// 규칙 burst_read: 같은 sub의 GET이 어느 10분 구간(시작 시각 포함, 끝 제외)에서든
+// 120건을 넘으면 회수를 제안합니다. 정확히 120건은 대상이 아닙니다.
+// 다른 sub의 사건은 합산하지 않고, GET이 아닌 사건은 세지 않습니다.
 export function detect(events) {
-  readEvents(events);
+  const { events: readable } = readEvents(events);
+  const bySub = new Map();
+  for (const { at, method, sub } of readable) {
+    if (method !== 'GET') continue;
+    if (!bySub.has(sub)) bySub.set(sub, []);
+    bySub.get(sub).push(at);
+  }
+  for (const [sub, times] of [...bySub].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    times.sort((a, b) => a - b);
+    let start = 0;
+    for (let end = 0; end < times.length; end += 1) {
+      while (times[end] - times[start] >= BURST_WINDOW_MS) start += 1;
+      if (end - start + 1 > BURST_LIMIT) {
+        return { action: 'propose_revocation', reasonCode: 'burst_read', subject: sub };
+      }
+    }
+  }
   return { action: 'observe' };
 }

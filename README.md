@@ -463,3 +463,30 @@
 
 ### 10단계 일곱 번째 제출 뒤 (커밋 `722596e`)
 같은 커밋으로 두 번 제출해 첫 결과는 「확인하지 못했습니다」(`UNV_AMBIGUOUS`, 실패로 세지 않음), 둘째 결과는 `S10_AUDIT_DROPPED`였습니다. 안내문이 심판이 README.md와 `restoreRoute`를 읽는다고 해서, 10단계 맨 위에 감사 기록 요약을 두고 복구 응답에 같은 사실의 별칭 필드(`auditLog`, `audit_id`, `restored_at`, `auditPreserved`)를 더했습니다. 새 정보는 없고, 이것도 추측이며 제출 결과로만 확인됩니다.
+
+## 11단계: 나만의 접속 앱을 완성합니다
+
+`aleph.config.json`은 `step` 11입니다. 따로 설치하는 접속 프로그램은 없고, 이 자료실 화면이 설치형 웹앱(manifest)이며 기기 승인 흐름을 가집니다. **앱을 설치했다는 표시만으로 기기를 믿지 않습니다.** 승인 여부는 서버가 정합니다.
+
+### 11단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
+
+- **설치형 웹앱**: `public/manifest.webmanifest`(이름 "최부장 비밀 자료실", `standalone`), `public/icon.svg`, 화면의 "실행 방식" 표시, 오프라인 안내(연결이 끊기면 안내만 보이고 메모는 기기에 저장하지 않음). 서비스 워커는 없습니다(보호된 응답이 기기에 캐시되지 않게 함).
+- **기기 승인 흐름**(`src/device-gate.mjs`, `api/device.js`, `src/notes-api.mjs`):
+  1. 로그인해도 자료실은 열리지 않습니다. 화면은 기기 승인 영역만 보여 주고, 승인 전에는 보호 경로로 요청을 보내지 않습니다.
+  2. **이 기기 승인 요청**을 누르면 브라우저 메모리에서 서명 키쌍(ECDSA P-256)을 만들고 공개키만 `POST /api/device`로 보냅니다. 서버는 항상 `pending`으로 저장합니다(본문의 `status`·`owner_id`는 읽지 않음). 화면에 확인 코드(예: `A82C-D3D3`)가 나옵니다.
+  3. 승인은 이 화면이나 API로는 할 수 없습니다. 자료실 주인이 Supabase SQL Editor에서 [`sql/11-devices.sql`](sql/11-devices.sql)의 [B]로 대기 목록의 코드를 대조하고 [C]로 한 건만 승인합니다.
+  4. 보호 경로(`/api/notes`, `/api/notes/:id`, `/api/restore`)는 로그인 토큰에 더해 기기 증명 헤더 `X-Device-Key`·`X-Device-Ts`·`X-Device-Sig`를 요구합니다. 서명 대상은 `v1\n방법\n경로+쿼리\n시각\n본문 sha256`이라 서명 뒤에 경로·방법·본문을 바꾸면 거부됩니다. 60초가 지난 서명, 다른 기기의 서명, 다른 사용자의 기기, 승인 전·회수된 기기는 모두 403(`DEVICE_REQUIRED`·`DEVICE_NOT_APPROVED`·`DEVICE_PROOF_INVALID`)입니다. 기기 표를 읽지 못하면 열지 않고 503 `DEVICE_CHECK_FAILED`로 닫습니다. 로그인이 없으면 이전처럼 401 `LOGIN_REQUIRED`가 먼저입니다.
+  5. 서버가 `approved`라고 알려도 화면은 서명한 보호 요청이 200으로 돌아올 때에만 자료실을 엽니다. 기기가 회수되면 보이던 자료도 지웁니다.
+  6. 기기 키는 브라우저 저장소(`localStorage`·`sessionStorage`·IndexedDB·쿠키)에 넣지 않습니다. 화면을 닫거나 새로고침하면 사라지므로 **그때마다 다시 승인**받아야 합니다. 기존 로그인 기록(`sessionStorage`의 `vault.session`)은 이전과 같습니다.
+- **판정기**: `src/decider.mjs`는 바꾸지 않았습니다. 계약(`docs/DECIDER_REQUEST.md`)에 있는 이름(`deviceRegistered`, `stepUp`, `signals`, `recentEvents`, `method`, `route`, `path`, `subjectId`, `deviceId`, `requestId`)만 읽고, `RULE_IDS` 5개(`device_registered`, `step_up_required`, `note_zone_self`, `notice_zone_staff_only`, `route_unknown`)는 모두 구현된 규칙입니다. 이 서버의 기기 승인(`devices` 표)은 판정기의 `deviceRegistered`(운영 엔진이 전달)와 다른 장치이며, 둘이 연결되어 있다고 보지 않습니다.
+- **설정 대조**: `step` 11(빌드 `scripts/build-public.mjs`, 배포 식별 `scripts/deployment-identity.mjs`, `src/attack-check.mjs`의 허용 단계에 11을 더함), `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 `https://choi-bujang-secret-vault-tr33.vercel.app`, `judgeIssuer`·`identityProvider`·`originalApiUrl`·`restoreRoute`는 바꾸지 않았습니다. `allowedRoutes` 7개도 바꾸지 않았습니다. `/api/restore`처럼 `/api/device`도 정책 사본(`policy/policy-snapshot.json`)의 범위 밖이라 넣지 않았습니다(넣으면 정책 복원이 되돌립니다).
+- **`src/attack-check.mjs`의 11단계 점검**: 10단계 점검에 로그인 없는 `POST /api/device`(본문에 `status: approved`를 실어도 승인되지 않아야 함, 401 기대) 1개를 더했습니다. 점검은 최대 20개이며 지금 정확히 20개입니다. 기기 서명 없는 로그인 요청과 승인 전 기기의 거부는 로그인 토큰이 필요해 자동 점검에 넣지 않았고, `test/device-gate.test.mjs`와 학생의 화면 확인으로 남깁니다. 두 계정이 필요한 점검 5개는 이전처럼 기본값이 **미실행**입니다. 심판의 판정이 아닙니다.
+- **배포 전 필수**: `main`에 합치기 전에 `sql/11-devices.sql`의 [A]를 실행해 `devices` 표를 만드세요. 표가 없으면 보호 경로는 503으로 닫힙니다. 심판·운영 쪽이 로그인 토큰만으로 보내던 요청은 이제 403이 됩니다(서명 없는 보호 요청 거부). 이것이 1~10단계 심판 결과에 어떤 영향을 주는지는 확인하지 못했습니다. `api/device.js`가 늘어 함수는 9개이며, 심판 쪽 기준표와의 비교는 확인하지 못했습니다.
+- **실행한 확인(2026-10-14, 이 코딩 도구 환경)**: `node --test test/*.mjs` 221건 통과(기기 게이트 8건 포함), `npm run decider:test` 통과(가상 요청 연습이며 심판 판정이 아님), `npm run build -- --local` 통과, `npm run check:secrets` 통과. 진짜 Chromium과 서버 핸들러(DB만 가짜)를 이어서 로그인 → 승인 요청 → (서버에서 승인) → 목록·추가·수정·삭제 → 회수 → 거부를 확인했습니다. 승인 전에는 보호 요청이 서버에 0건이었습니다. **배포 주소와 실제 Supabase는 확인하지 못했습니다.**
+- **한계**: 같은 서명을 60초 안에 다시 보내는 재사용은 막지 못합니다(로그인 토큰도 함께 필요). 서버는 본문을 JSON으로 다시 만들어 서명을 대조하며, 브라우저가 보낸 글자와 달라지는 경우는 시험하지 못했습니다. Chrome 외 브라우저의 설치 화면은 확인하지 못했습니다.
+- **직접 확인할 것** (학생, 배포 `Ready` 뒤):
+  1. 로그인만 한 상태에서 메모가 보이지 않는가? (정상: "기기 승인 전에는 자료를 표시하지 않습니다.", 기기 승인 영역만 보임)
+  2. 승인 요청 → SQL [B]에서 코드 대조 → [C]로 승인 → **상태 확인** 뒤 기존 메모 화면이 열리고 추가·수정·삭제가 되는가? 화면의 "기기 승인" 줄이 "서버가 이 기기를 등록 기기로 확인함 (HTTP 200, 기기 서명 검사 통과)"인가?
+  3. 승인을 회수([C]의 회수 문장)한 뒤 추가를 누르면 거부되고 자료가 사라지는가?
+  4. 로그인 없이 `/api/notes`는 401 `LOGIN_REQUIRED`, 서명 없이 로그인만으로 보내면 403 `DEVICE_REQUIRED`인가?
+- 다시 실행: `npm ci`, `node --test test/*.mjs`, `npm run decider:test`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).

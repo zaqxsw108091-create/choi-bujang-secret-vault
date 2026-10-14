@@ -42,6 +42,22 @@ const bodyText = (body) => typeof body === 'string' ? body
   : body && typeof body === 'object' && Object.keys(body).length ? JSON.stringify(body) : '';
 export const signedText = ({ method, target, ts, body }) => `v1\n${method}\n${target}\n${ts}\n${sha256Hex(body)}`;
 const targetOf = (url) => { const u = new URL(url ?? '/', 'http://local'); return `${u.pathname}${u.search}`; };
+// Vercel은 [id] 파일로 요청을 넘길 때 주소에 경로의 id를 쿼리(?id=…)로 덧붙이거나 경로에 [id] 글자를 쓸 수 있습니다.
+// 브라우저가 서명한 주소에는 그 덧붙임이 없으므로, 서버가 자기 쪽에서 덧붙은 부분만 걷어낸 주소도 후보로 둡니다.
+// 걷어내는 것은 "경로의 마지막 조각과 똑같은 id 쿼리"뿐입니다(그 id는 서명된 경로에 이미 들어 있어 잃는 정보가 없습니다).
+// 요청이 후보 중 하나와 서명이 맞아야 하며, 경로·쿼리의 다른 부분이 서명과 다르면 어느 후보도 맞지 않아 거부됩니다.
+export function targetsOf(request) {
+  const raw = targetOf(request.url);
+  const id = typeof request.query?.id === 'string' ? request.query.id : null;
+  if (!id) return [raw];
+  const u = new URL(request.url ?? '/', 'http://local');
+  const path = u.pathname.includes('/[id]') ? u.pathname.replace('/[id]', `/${id}`) : u.pathname;
+  const params = new URLSearchParams(u.search);
+  if (path.split('/').filter(Boolean).pop() === id && params.get('id') === id) params.delete('id');
+  const rest = params.toString();
+  const stripped = rest ? `${path}?${rest}` : path;
+  return stripped === raw ? [raw] : [raw, stripped];
+}
 
 export function createDeviceGate({ now = () => Date.now(), subtle = globalThis.crypto.subtle } = {}) {
   // 결과: { ok: true } 또는 { ok: false, status, error, reason }. 모르는 상태·DB 오류는 열지 않고 닫습니다.
@@ -68,8 +84,11 @@ export function createDeviceGate({ now = () => Date.now(), subtle = globalThis.c
     try {
       if (jwk && keyIdOf(jwk) === keyId) {
         const key = await subtle.importKey('jwk', jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
-        const text = signedText({ method: request.method, target: targetOf(request.url), ts, body: bodyText(request.body) });
-        valid = await subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, Buffer.from(sig, 'base64url'), Buffer.from(text, 'utf8'));
+        for (const target of targetsOf(request)) {
+          const text = signedText({ method: request.method, target, ts, body: bodyText(request.body) });
+          valid = await subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, Buffer.from(sig, 'base64url'), Buffer.from(text, 'utf8'));
+          if (valid) break;
+        }
       }
     } catch { valid = false; }
     return valid ? { ok: true } : { ok: false, status: 403, error: 'DEVICE_PROOF_INVALID', reason: 'device_signature_invalid' };

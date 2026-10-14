@@ -408,13 +408,15 @@
 
 ### 점검 5개를 실제로 보내는 방법 (선택, 학생이 자기 터미널에서만)
 
-토큰은 약 1시간 뒤 만료되므로 아래를 한 번에 끝냅니다. 값은 채팅·파일·Git에 붙여 넣지 않고, 터미널 창을 닫거나 마지막 줄로 지웁니다.
+**권장: `npm.cmd run attack:live`** (PowerShell 실행 정책 때문에 `npm` 대신 `npm.cmd`). 토큰을 복사하거나 환경변수를 만들 필요가 없습니다.
 
-1. 메모 주인 B로 로그인한 탭의 Console 입력칸에 `copy(JSON.parse(sessionStorage.getItem('vault.session')).access_token)`를 입력합니다(화면에 출력되지 않고 클립보드에만 복사됨). PowerShell에서 `$env:ATTACK_TOKEN_OWNER = (Get-Clipboard -Raw).Trim()`.
-2. 다른 계정 A로 로그인한 시크릿 창에서 같은 Console 줄을 실행하고 `$env:ATTACK_TOKEN_OTHER = (Get-Clipboard -Raw).Trim()`.
-3. Supabase의 프로젝트 설정 > API 키 화면에서 공개(publishable) 키를 복사하고 `$env:ATTACK_ANON_KEY = (Get-Clipboard -Raw).Trim()`. 서버 전용 키(secret, service_role)는 절대 쓰지 않습니다.
-4. `npm.cmd run bundle`(PowerShell 실행 정책 때문에 `npm` 대신 `npm.cmd`).
-5. 끝나면 `Remove-Item Env:ATTACK_TOKEN_OWNER, Env:ATTACK_TOKEN_OTHER, Env:ATTACK_ANON_KEY`.
+1. `git pull`로 최신 커밋을 받고 `npm.cmd ci`가 끝난 상태에서 `npm.cmd run attack:live`를 실행합니다.
+2. 묻는 대로 입력합니다: 메모 주인 B의 이메일과 비밀번호, 다른 계정 A의 이메일과 비밀번호, 공개 anon 키(없으면 그냥 Enter). 비밀번호와 키는 입력해도 화면에 보이지 않고, 저장하거나 출력하지 않습니다. 취소는 Ctrl+C입니다.
+3. 로그인 요청은 **정확히 2번**(B 1번, A 1번)이며, 실패하면 다시 시도하지 않고 멈춥니다. 발급 횟수 제한에 걸리면 그 사실을 알리고 멈추므로, 몇 분 뒤에 다시 하세요.
+4. 받은 토큰은 이 프로세스 안에서만 점검 코드에 넘기고 화면·파일·제출 묶음에 쓰지 않습니다. 이어서 `npm run bundle`과 같은 제출 묶음(`artifacts/submission.json`)이 만들어지고, 끝에 두 계정·anon 점검 5개의 결과가 출력됩니다.
+5. 시험 계정과 가상 메모로만 쓰세요. 두 계정의 이메일이 같으면 요청을 보내기 전에 거부합니다. 열려 있는 브라우저의 로그인에는 영향이 없습니다(새 로그인 세션을 만듭니다).
+
+대안(수동): 환경변수 `ATTACK_TOKEN_OWNER`(메모 주인 B의 로그인 토큰), `ATTACK_TOKEN_OTHER`(다른 계정 A의 로그인 토큰), `ATTACK_ANON_KEY`(공개 anon 키)를 자기 터미널에 직접 넣고 `npm.cmd run bundle`을 실행해도 같은 점검을 보냅니다. 토큰은 약 1시간 뒤 만료되고, 클립보드로 옮길 때 값이 덮어써지기 쉬워 권장하지 않습니다. 쓴 뒤에는 `Remove-Item Env:ATTACK_TOKEN_OWNER, Env:ATTACK_TOKEN_OTHER, Env:ATTACK_ANON_KEY`로 지웁니다.
 
 - 정상 결과: `other_owner_*` 4개가 `거부됨 (HTTP 403)`, `anon_data_api_notes_refused`가 `거부됨 (HTTP 401, 권한 없음 42501)`입니다. `거부되지 않음`이 나오면 큰 문제입니다.
 - 이 점검은 B의 메모에 다른 계정으로 `PUT`·`DELETE`를 실제로 보냅니다. 정상이면 403이라 바뀌지 않지만, 서버가 잘못되어 있으면 B의 시험 메모가 바뀌거나 지워질 수 있습니다(사본으로 복구 가능). 시험 계정과 가상 메모로만 하세요.

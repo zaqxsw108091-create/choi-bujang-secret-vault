@@ -15,7 +15,7 @@ import { createLoginVerifier } from './verify-login.mjs';
 import { resourceIdOf } from './resources.mjs';
 import { clientIp, findBlock, loadBlockRules } from './xdr-block.mjs';
 import { defaultBlockLookup } from './xdr-store.mjs';
-import { readRestoreId, restoreOneNote } from './note-restore.mjs';
+import { backupBeforeChange, keepBackup, readRestoreId, restoreOneNote } from './note-restore.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const MAX_TITLE = 200;
@@ -107,6 +107,8 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
       const { data, error } = await supabase.from('notes').insert(row).select('id').single();
       if (error?.code === '23505') return response.status(409).json({ error: 'ID_ALREADY_EXISTS' });
       if (error) return failed(response, error, '추가');
+      // 10단계: 만든 직후의 상태를 사본으로 저장합니다(이미 있으면 덮어쓰지 않음, 실패해도 추가는 그대로).
+      await keepBackup(supabase, { id: data.id, owner_id: userId, title: row.title, content: row.content });
       return response.status(201).json({ id: data.id });
     }
     // 목록: 서버가 확인한 사용자 본인의 메모만 돌려줍니다.
@@ -143,6 +145,8 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
     if (request.method === 'PUT') {
       const note = readNote(request.body, { allowId: false });
       if (!note) return response.status(400).json({ error: 'INVALID_BODY' });
+      // 10단계: 사본이 없으면 바뀌기 직전 상태를 먼저 저장합니다(있으면 덮어쓰지 않음).
+      await backupBeforeChange(supabase, id, userId);
       // 기존 행(owner_id = 본인)만 고르고, 새 값의 owner_id도 본인으로 고정합니다.
       const { data, error } = await supabase.from('notes')
         .update({ title: note.title, content: note.body, owner_id: userId })
@@ -150,6 +154,8 @@ export function createNotesApi({ getVerifier, getSupabase, getBlockRules = () =>
       if (error) return failed(response, error, '수정');
       return data?.length ? response.status(200).json(toPublic(data[0])) : await notFound();
     }
+    // 10단계: 지우기 전에 사본이 없으면 그 상태를 저장합니다(있으면 덮어쓰지 않음).
+    await backupBeforeChange(supabase, id, userId);
     const { data, error } = await supabase.from('notes').delete()
       .eq('id', id).eq('owner_id', userId).select('id');
     if (error) return failed(response, error, '삭제');

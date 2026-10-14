@@ -180,3 +180,13 @@ test('변조된 정책에서는 A의 정상 요청도 거부되고, 되돌린 �
   // A의 수정은 여전히 된다
   assert.equal((await api.item({ method: 'PUT', authorization: bearer(restored, A), id: A_NOTE, body: { title: '수정', body: '본문' } })).status, 200);
 });
+
+test('바뀐 것이 없어도 --apply 실행은 확인 사실만 감사 이력에 덧붙이고 정책은 쓰지 않는다', async () => {
+  const root = await sandbox({ tamper: false });
+  const before = await readFile(join(root, 'aleph.config.json'), 'utf8');
+  const result = await runRestore({ root, ruleIds: RULE_IDS, apply: true });
+  assert.equal(result.status, 'nothing_to_restore');
+  const lines = (await readFile(join(root, AUDIT_FILE), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  assert.deepEqual(lines.map(line => [line.event, line.changeCount]), [['older_entry', undefined], ['policy_restore_checked', 0]]);
+  assert.equal(await readFile(join(root, 'aleph.config.json'), 'utf8'), before);
+});

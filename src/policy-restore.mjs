@@ -117,7 +117,14 @@ export async function runRestore({ root, ruleIds, apply = false, confirm = null,
   if (plan.stuck.length > 0) {
     throw new PolicySnapshotError('restore_incomplete', `복원 뒤에도 남는 차이가 있어 쓰지 않습니다: ${plan.stuck.map(c => c.path).join(', ')}`);
   }
-  if (plan.changes.length === 0) return { status: 'nothing_to_restore', plan };
+  if (plan.changes.length === 0) {
+    // 바꿀 것이 없어도 --apply로 실행했다면 "사본을 검증했고 바뀐 것이 없었다"는 사실만 감사 이력에 덧붙입니다(정책은 쓰지 않음).
+    if (!apply) return { status: 'nothing_to_restore', plan };
+    const checked = { at: now().toISOString(), event: 'policy_restore_checked', restoreVersion: plan.restoreVersion, snapshotSha256: plan.sha256,
+      beforePolicySha256: plan.beforeDigest, afterPolicySha256: plan.beforeDigest, changedPaths: [], changeCount: 0, notRestored: [] };
+    await appendFile(join(root, AUDIT_FILE), `${JSON.stringify(checked)}\n`);
+    return { status: 'nothing_to_restore', plan, audit: checked };
+  }
   if (!apply) return { status: 'planned', plan };
   if (confirm !== plan.confirm) return { status: 'refused', plan, reason: 'confirm_mismatch' };
 

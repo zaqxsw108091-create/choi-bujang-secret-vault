@@ -63,10 +63,10 @@ function apiFor(db) {
     getVerifier: () => verify, getSupabase: () => ({ from: table => new Query(db, table) }),
     deviceGate: createDeviceGate({ now: () => NOW }),
   });
-  return (handler) => async ({ method = 'GET', url, authorization, headers = {}, body } = {}) => {
+  return (handler) => async ({ method = 'GET', url, serverUrl, query, authorization, headers = {}, body } = {}) => {
     const out = { headers: {} };
     const response = { setHeader: (n, v) => { out.headers[n] = v; }, status: c => { out.status = c; return response; }, json: p => { out.body = p; return response; } };
-    await api[handler]({ method, url, headers: { ...(authorization ? { authorization } : {}), ...headers }, body }, response);
+    await api[handler]({ method, url: serverUrl ?? url, query, headers: { ...(authorization ? { authorization } : {}), ...headers }, body }, response);
     return out;
   };
 }
@@ -194,4 +194,38 @@ test('운영용 notesApi는 기기 확인을 켠 채로 만들어진다', () => 
   const source = readFileSync(new URL('../src/notes-api.mjs', import.meta.url), 'utf8');
   assert.match(source, /deviceGate: createDeviceGate\(\)/u);
   assert.equal(sha256Hex('a').length, 64);
+});
+
+// 실제 배포(Vercel)에서 메모 한 건 경로가 서명 검사에서 떨어졌던 사고의 재현: 서버가 보는 주소에는 ?id=<id>가 덧붙거나 [id]가 쓰입니다.
+test('Vercel이 [id] 경로에 덧붙이는 id 쿼리가 있어도 승인된 기기의 수정·삭제는 통과하고, 다른 id나 다른 쿼리는 거부된다', async () => {
+  const d = await newDevice();
+  const edit = { title: '고침', body: '본문' };
+  const path = `/api/notes/${A_NOTE}`;
+  const shapes = [
+    ['?id= 덧붙임', { serverUrl: `${path}?id=${A_NOTE}`, query: { id: A_NOTE } }],
+    ['[id] 글자와 ?id=', { serverUrl: `/api/notes/[id]?id=${A_NOTE}`, query: { id: A_NOTE } }],
+    ['query 객체만', { serverUrl: path, query: { id: A_NOTE } }],
+  ];
+  for (const [label, shape] of shapes) {
+    const db = world([row(d, A, 'approved')]);
+    const call = apiFor(db)('item');
+    const put = await call({ method: 'PUT', url: path, authorization: bearer(A), body: edit, headers: await d.sign({ method: 'PUT', url: path, body: edit }), ...shape });
+    assert.equal(put.status, 200, `PUT ${label}`);
+    const del = await call({ method: 'DELETE', url: path, authorization: bearer(A), headers: await d.sign({ method: 'DELETE', url: path }), ...shape });
+    assert.equal(del.status, 200, `DELETE ${label}`);
+  }
+  // 걷어내기가 서명을 우회하는 길이 되지 않는지: 서명한 id와 다른 id, 다른 쿼리가 덧붙은 경우는 거부된다.
+  const other = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
+  const db = world([row(d, A, 'approved')]);
+  const call = apiFor(db)('item');
+  const signedFor = await d.sign({ method: 'DELETE', url: path });
+  for (const [label, shape] of [
+    ['다른 id', { serverUrl: `/api/notes/${other}?id=${other}`, query: { id: other } }],
+    ['경로는 서명과 같고 쿼리 id만 다름', { serverUrl: `${path}?id=${other}`, query: { id: other } }],
+    ['서명에 없는 쿼리 추가', { serverUrl: `${path}?id=${A_NOTE}&x=1`, query: { id: A_NOTE } }],
+  ]) {
+    const out = await call({ method: 'DELETE', url: path, authorization: bearer(A), headers: signedFor, ...shape });
+    assert.equal(out.status, 403, label);
+  }
+  assert.equal(db.tables.notes.length, 1, '거부된 요청은 자료를 지우지 않는다');
 });

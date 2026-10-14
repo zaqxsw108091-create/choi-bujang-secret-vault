@@ -10,9 +10,10 @@ test('정상 사건과 의심 사건에서 시각·요청 종류·가명 사용�
     { at, method: 'GET', identity: { sub: 'suspect_fixture' }, token: 'x', content: 'y', name: 'z' },
   ]);
   assert.equal(skipped, 0);
-  assert.deepEqual(events.map(e => Object.keys(e).sort()), [['at', 'method', 'sub'], ['at', 'method', 'sub']]);
+  assert.deepEqual(events.map(e => Object.keys(e).sort()), [['at', 'method', 'network', 'sub'], ['at', 'method', 'network', 'sub']]);
   assert.deepEqual(events.map(e => [e.method, e.sub]), [['GET', 'learner_fixture'], ['GET', 'suspect_fixture']]);
   assert.ok(!JSON.stringify(events).match(/token|content|"name"/));
+  assert.deepEqual(events.map(e => e.network), [null, null]);
 });
 
 test('모양이 맞지 않는 사건은 건너뛰고 개수만 센다', () => {
@@ -61,4 +62,27 @@ test('회수 제안: 대상 하나와 이유 코드만 담고 입력은 바꾸�
 test('정상 사건은 회수 제안 없이 observe만 돌려준다', () => {
   assert.deepEqual(detect(reads(30)), { action: 'observe' });
   assert.deepEqual(detect([]), { action: 'observe' });
+});
+
+const withNet = (list, network) => list.map(event => ({ ...event, network }));
+const history = (n, network) => withNet(reads(n, { gap: 1000 }).map(event => ({
+  ...event, at: new Date(Date.parse(event.at) - 3600000).toISOString() })), network);
+
+test('복합: 평소와 다른 네트워크에서 폭주할 때만 회수 제안', () => {
+  const burstB = withNet(reads(130), 'net_b');
+  assert.deepEqual(detect([...history(5, 'net_a'), ...burstB]),
+    { action: 'propose_revocation', reasonCode: 'burst_read', subject: 'a' });
+});
+
+test('복합: 평소 네트워크의 폭주, 다른 네트워크의 소량 조회는 제안하지 않는다', () => {
+  assert.deepEqual(detect([...history(5, 'net_a'), ...withNet(reads(200), 'net_a')]), { action: 'observe' });
+  assert.deepEqual(detect([...history(5, 'net_a'), ...withNet(reads(30), 'net_b')]), { action: 'observe' });
+  assert.deepEqual(detect([...history(5, 'net_a'), ...withNet(reads(120), 'net_b')]), { action: 'observe' });
+});
+
+test('network가 없거나 unknown이면 계약대로 폭주만으로 판단하고, 결과에 network를 담지 않는다', () => {
+  assert.equal(detect(reads(130)).action, 'propose_revocation');
+  assert.equal(detect(withNet(reads(130), 'unknown')).action, 'propose_revocation');
+  const result = detect([...history(5, 'net_a'), ...withNet(reads(130), 'net_b')]);
+  assert.deepEqual(Object.keys(result).sort(), ['action', 'reasonCode', 'subject']);
 });

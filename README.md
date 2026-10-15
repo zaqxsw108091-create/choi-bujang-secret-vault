@@ -593,3 +593,14 @@
 | 배포가 이 커밋인지, 설치형 앱 설치, 서버 중지·복구 절차의 실제 동작 | 배포 주소·Supabase·Vercel 화면 | — | **미실행** (코딩 도구 환경은 외부 접속이 막혀 있음) |
 | ALEPH SDP 엔진과의 실제 연결(판정·사건 전달·접속 회수) | — | 이 저장소에서 확인할 수 없음 | **미확인** |
 | 41종 공격 방어 시험 | — | — | **미실행** |
+
+### 12단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
+
+- 작동하는 기능: 11단계까지(로그인, 메모 소유자 검사, 기기 승인과 서명, 복구, 판정기 규칙 5개, 탐지 `burst_read`)에 더해, 자료실 화면의 **탈환 작전실 요약**(`GET /api/ops`, 확인됨·미실행 구분, 서버 로그 한 줄과 대조), **회귀표**(`npm run matrix`), 설치·실행·중지·복구 안내(위 "12단계 제작 3")가 있습니다.
+- 설정 대조(2026-10-15): `aleph.config.json`은 `step` 12(빌드 `scripts/build-public.mjs`, 배포 식별 `scripts/deployment-identity.mjs`, `src/attack-check.mjs`의 허용 단계에 12를 더함), `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 `https://choi-bujang-secret-vault-tr33.vercel.app`, `judgeIssuer`·`identityProvider`·`originalApiUrl`·`restoreRoute`·`allowedRoutes` 7개는 바꾸지 않았습니다(`/api/ops`는 `/api/restore`·`/api/device`처럼 정책 사본 범위 밖이라 넣지 않음). `src/decider.mjs`의 `RULE_IDS` 5개는 모두 구현한 규칙이며 이번 단계에서 판정기는 바꾸지 않았습니다.
+- `src/attack-check.mjs`의 12단계 점검은 11단계와 같은 20개입니다. 로그인 없이 보내는 요청만 실제로 보내고, 두 계정이 필요한 5개는 환경변수를 넣지 않으면 미실행입니다. 심판의 판정이 아닙니다. `GET /api/ops`의 로그인 없음 거부는 자동 점검에 넣지 않았고 회귀표·시험에서 확인합니다.
+- **직접 확인할 것 세 가지**
+  1. **실제 API 결과와 화면 표시가 일치하는가?** 자료실을 연 뒤 "탈환 작전실 요약"의 "서버 기록과 대조할 줄"이 Vercel Logs의 `ops 요약:` 줄과 같은 글자인지 봅니다. 가짜 DB 시험(`test/ops-summary.test.mjs`)에서는 응답의 `logLine`과 서버 로그가 같음을 확인했고, **배포에서는 아직 확인하지 못했습니다(미실행).**
+  2. **41종 시험의 실행·미실행을 구별했는가?** 41종 공격 방어 시험은 **미실행**입니다. 회귀표에도 통과로 쓰지 않고 `미실행` 줄로 고정했습니다(목록과 실행 수단이 이 저장소에 없음). 회귀표 `npm run matrix`도 코딩 도구 환경에서는 배포에 접속할 수 없어 **실행하지 않았습니다.**
+  3. **제공 엔진과 학생 작업의 출처를 밝혔는가?** "12단계 제작 3"의 출처 표에 ALEPH SDP 엔진(제공, 이 저장소에 코드 없음, 연결 미확인)·시작 틀·학생 몫을 나눠 적었습니다.
+- 다시 실행: `npm ci`, `node --test test/*.mjs`, `npm run decider:test`, `npm run detect:test`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).

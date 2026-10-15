@@ -490,3 +490,7 @@
   3. 승인을 회수([C]의 회수 문장)한 뒤 추가를 누르면 거부되고 자료가 사라지는가?
   4. 로그인 없이 `/api/notes`는 401 `LOGIN_REQUIRED`, 서명 없이 로그인만으로 보내면 403 `DEVICE_REQUIRED`인가?
 - 다시 실행: `npm ci`, `node --test test/*.mjs`, `npm run decider:test`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).
+
+### 11단계 배포 기록 (2026-10-15)
+
+2026-10-14에 Vercel 무료 배포 하루 한도(`api-deployments-free-per-day`) 때문에 PR #55·#56의 배포가 실패해, 사이트에는 PR #54 코드(메모 한 건 수정·삭제가 403이던 버전)가 올라가 있었습니다. 수정 코드는 `main`에 이미 있었고, 2026-10-15에 한도가 풀렸는지 확인하며 `main`을 다시 배포하려고 이 기록을 합쳤습니다. 이 기록이 배포되어 `Ready`가 된 뒤, 승인한 기기에서 메모 수정·삭제가 되는지 사이트에서 직접 확인해야 합니다(이 코딩 도구는 배포 사이트에 접속하지 못해 확인하지 못했습니다).

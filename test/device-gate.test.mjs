@@ -240,3 +240,33 @@ test('서명이 맞지 않으면 403 본문에 서버가 받은 요청(방법·�
   assert.deepEqual([out.status, out.body.error, out.body.seen], [403, 'DEVICE_PROOF_INVALID', `DELETE ${url}?x=1`]);
   assert.doesNotMatch(JSON.stringify(out.body), /sig|[0-9a-f]{40}/iu);
 });
+
+// 공격자 시점 점검: 앞선 시험이 다루지 않은 변칙 입력은 모두 열지 않고 닫혀야 한다.
+test('기기 증명 헤더의 변칙(일부 누락·대문자·배열·미래/음수 시각·잘린 서명)은 모두 403으로 거부되고 자료를 바꾸지 않는다', async () => {
+  const d = await newDevice();
+  const url = `/api/notes/${A_NOTE}`;
+  const edit = { title: '바꿈', body: '본문' };
+  const good = await d.sign({ method: 'PUT', url, body: edit });
+  const cases = [
+    ['키만 있고 시각·서명 없음', { 'x-device-key': good['x-device-key'] }],
+    ['서명만 있음', { 'x-device-sig': good['x-device-sig'] }],
+    ['키 지문 대문자', { ...good, 'x-device-key': good['x-device-key'].toUpperCase() }],
+    ['헤더가 배열(중복 전송)', { ...good, 'x-device-sig': [good['x-device-sig'], good['x-device-sig']] }],
+    ['먼 미래 시각', await d.sign({ method: 'PUT', url, body: edit, ts: NOW + 3_600_000 })],
+    ['12자리 시각', { ...good, 'x-device-ts': String(NOW).slice(1) }],
+    ['서명 한 글자 변조', { ...good, 'x-device-sig': (good['x-device-sig'][0] === 'A' ? 'B' : 'A') + good['x-device-sig'].slice(1) }],
+    ['지문이 다른(존재하지 않는) 키', { ...good, 'x-device-key': 'f'.repeat(64) }],
+  ];
+  for (const [label, headers] of cases) {
+    const db = world([row(d, A, 'approved')]);
+    const out = await apiFor(db)('item')({ method: 'PUT', url, authorization: bearer(A), body: edit, headers });
+    assert.equal(out.status, 403, label);
+    assert.equal(db.tables.notes[0].title, 'A 가상', `${label}: 자료 불변`);
+  }
+  // 승인 상태가 pending으로 되돌려졌거나 소유자가 바뀐 행도 같은 서명으로 열리지 않는다.
+  for (const [label, mutate] of [['pending', r => { r.status = 'pending'; }], ['소유자 변경', r => { r.owner_id = B; }]]) {
+    const dev = row(d, A, 'approved'); mutate(dev);
+    const out = await apiFor(world([dev]))('item')({ method: 'PUT', url, authorization: bearer(A), body: edit, headers: good });
+    assert.equal(out.status, 403, label);
+  }
+});

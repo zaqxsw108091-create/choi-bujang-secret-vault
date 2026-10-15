@@ -7,7 +7,7 @@ const baseline = JSON.parse(await readFile(new URL('../package/baseline-function
 
 // 학생이 2~5단계, 10단계(복구 경로 api/restore.js), 11단계(기기 승인 api/device.js)에서 만든 서버 함수입니다(시작 틀 기준표에는 없음). 함수가 늘거나 줄면 이 목록도 뜻을 갖고 함께 바꿉니다.
 // 시험은 api/ 바로 아래 파일만 읽으므로 하위 폴더(api/notes/[id].js)는 세지 않습니다.
-const STUDENT_FUNCTIONS = ['api/device.js', 'api/login.js', 'api/notes.js', 'api/refresh.js', 'api/restore.js'];
+const STUDENT_FUNCTIONS = ['api/device.js', 'api/login.js', 'api/notes.js', 'api/ops.js', 'api/refresh.js', 'api/restore.js'];
 
 test('패키징 함수 기준표는 시작 틀의 실제 API와 일치하고, 학생이 만든 함수 말고는 늘지 않았다', async () => {
   const actual = (await readdir(new URL('../api/', import.meta.url)))

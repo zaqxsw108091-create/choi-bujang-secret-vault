@@ -18,6 +18,7 @@ import { defaultBlockLookup } from './xdr-store.mjs';
 import { backupBeforeChange, bodyKeys, keepBackup, readRestoreRequest, restoreOneNote } from './note-restore.mjs';
 import { policyPlan } from './policy-plan.mjs';
 import { createDeviceGate, deviceRequest } from './device-gate.mjs';
+import { buildOpsSummary } from './ops-summary.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const MAX_TITLE = 200;
@@ -202,7 +203,14 @@ export function createNotesApi({ getVerifier, getSupabase, getPolicyPlan = polic
   const device = guarded(['GET', 'POST'], ({ request, response, supabase, userId }) =>
     deviceRequest({ request, response, supabase, userId, deny }), { needsDevice: false });
 
-  return { collection, item, restore, device };
+  // GET /api/ops (12단계): 탈환 작전실 요약. 로그인과 기기 서명이 필요하고, 본인 기록의 숫자·이름만 돌려줍니다.
+  const ops = guarded(['GET'], async ({ response, supabase, userId }) => {
+    const { body, logLine } = await buildOpsSummary({ supabase, userId, now });
+    console.info(logLine);
+    return response.status(200).json(body);
+  });
+
+  return { collection, item, restore, device, ops };
 }
 
 // 서버 런타임에서 한 번만 만듭니다. 환경변수가 없으면 만들지 않고 던집니다.

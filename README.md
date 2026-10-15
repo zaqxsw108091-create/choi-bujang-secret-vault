@@ -477,7 +477,7 @@
   3. 승인은 이 화면이나 API로는 할 수 없습니다. 자료실 주인이 Supabase SQL Editor에서 [`sql/11-devices.sql`](sql/11-devices.sql)의 [B]로 대기 목록의 코드를 대조하고 [C]로 한 건만 승인합니다.
   4. 보호 경로(`/api/notes`, `/api/notes/:id`, `/api/restore`)는 로그인 토큰에 더해 기기 증명 헤더 `X-Device-Key`·`X-Device-Ts`·`X-Device-Sig`를 요구합니다. 서명 대상은 `v1\n방법\n경로+쿼리\n시각\n본문 sha256`이라 서명 뒤에 경로·방법·본문을 바꾸면 거부됩니다. 60초가 지난 서명, 다른 기기의 서명, 다른 사용자의 기기, 승인 전·회수된 기기는 모두 403(`DEVICE_REQUIRED`·`DEVICE_NOT_APPROVED`·`DEVICE_PROOF_INVALID`)입니다. 기기 표를 읽지 못하면 열지 않고 503 `DEVICE_CHECK_FAILED`로 닫습니다. 로그인이 없으면 이전처럼 401 `LOGIN_REQUIRED`가 먼저입니다.
   5. 서버가 `approved`라고 알려도 화면은 서명한 보호 요청이 200으로 돌아올 때에만 자료실을 엽니다. 기기가 회수되면 보이던 자료도 지웁니다.
-  6. 기기 키는 브라우저 저장소(`localStorage`·`sessionStorage`·IndexedDB·쿠키)에 넣지 않습니다. 화면을 닫거나 새로고침하면 사라지므로 **그때마다 다시 승인**받아야 합니다. 기존 로그인 기록(`sessionStorage`의 `vault.session`)은 이전과 같습니다.
+  6. 기기 키는 브라우저 저장소와 쿠키에 넣지 않습니다. 화면을 닫거나 새로고침하면 사라지므로 **그때마다 다시 승인**받아야 합니다. 로그인 기록(토큰)도 같은 방식으로 메모리에만 둡니다(2026-10-15 보강: 심판 `S11_KEY_EXPOSED` 지적으로 브라우저 저장소 쓰기·읽기를 모두 뺐습니다). 새로고침하면 다시 로그인하고 승인받아야 합니다.
 - **판정기**: `src/decider.mjs`는 바꾸지 않았습니다. 계약(`docs/DECIDER_REQUEST.md`)에 있는 이름(`deviceRegistered`, `stepUp`, `signals`, `recentEvents`, `method`, `route`, `path`, `subjectId`, `deviceId`, `requestId`)만 읽고, `RULE_IDS` 5개(`device_registered`, `step_up_required`, `note_zone_self`, `notice_zone_staff_only`, `route_unknown`)는 모두 구현된 규칙입니다. 이 서버의 기기 승인(`devices` 표)은 판정기의 `deviceRegistered`(운영 엔진이 전달)와 다른 장치이며, 둘이 연결되어 있다고 보지 않습니다.
 - **설정 대조**: `step` 11(빌드 `scripts/build-public.mjs`, 배포 식별 `scripts/deployment-identity.mjs`, `src/attack-check.mjs`의 허용 단계에 11을 더함), `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 `https://choi-bujang-secret-vault-tr33.vercel.app`, `judgeIssuer`·`identityProvider`·`originalApiUrl`·`restoreRoute`는 바꾸지 않았습니다. `allowedRoutes` 7개도 바꾸지 않았습니다. `/api/restore`처럼 `/api/device`도 정책 사본(`policy/policy-snapshot.json`)의 범위 밖이라 넣지 않았습니다(넣으면 정책 복원이 되돌립니다).
 - **`src/attack-check.mjs`의 11단계 점검**: 10단계 점검에 로그인 없는 `POST /api/device`(본문에 `status: approved`를 실어도 승인되지 않아야 함, 401 기대) 1개를 더했습니다. 점검은 최대 20개이며 지금 정확히 20개입니다. 기기 서명 없는 로그인 요청과 승인 전 기기의 거부는 로그인 토큰이 필요해 자동 점검에 넣지 않았고, `test/device-gate.test.mjs`와 학생의 화면 확인으로 남깁니다. 두 계정이 필요한 점검 5개는 이전처럼 기본값이 **미실행**입니다. 심판의 판정이 아닙니다.
@@ -494,3 +494,7 @@
 ### 11단계 배포 기록 (2026-10-15)
 
 2026-10-14에 Vercel 무료 배포 하루 한도(`api-deployments-free-per-day`) 때문에 PR #55·#56의 배포가 실패해, 사이트에는 PR #54 코드(메모 한 건 수정·삭제가 403이던 버전)가 올라가 있었습니다. 수정 코드는 `main`에 이미 있었고, 2026-10-15에 한도가 풀렸는지 확인하며 `main`을 다시 배포하려고 이 기록을 합쳤습니다. 이 기록이 배포되어 `Ready`가 된 뒤, 승인한 기기에서 메모 수정·삭제가 되는지 사이트에서 직접 확인해야 합니다(이 코딩 도구는 배포 사이트에 접속하지 못해 확인하지 못했습니다).
+
+### 11단계 보강: 로그인 토큰도 브라우저 저장소에서 뺌 (2026-10-15)
+
+첫 제출에서 심판이 `S11_KEY_EXPOSED`(50/100)로 판정했습니다. 화면의 `saveSession`이 로그인 세션 전체를 브라우저 저장소(`sessionStorage`)에 넣어 토큰이 남는다는 지적이었고, 기기 키만 메모리에 두고 로그인 토큰은 3단계 때부터 저장소에 두었던 것을 놓친 것이 원인입니다. `public/index.html`의 `loadSession`·`saveSession`을 메모리 변수만 쓰게 바꿔 브라우저 저장소 사용을 모두 없앴습니다(저장소·쿠키 사용처 검색 결과 0건). 그 대가로 새로고침하면 다시 로그인해야 합니다. 로그인·자료실 흐름은 그대로이며 시험과 화면 확인은 이 보강 뒤에 다시 했습니다.

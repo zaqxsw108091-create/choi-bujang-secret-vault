@@ -69,7 +69,7 @@
     <section id="device" class="status" aria-label="기기 승인" hidden>
       <p><strong>이 기기는 서버가 등록 기기로 확인하기 전까지 자료실을 열 수 없습니다.</strong>
       승인 요청 버튼은 요청만 보냅니다. 승인은 이 화면이 아니라 서버에서 자료실 주인이 확인 코드를 대조한 뒤에만 됩니다.
-      기기 키는 이 화면의 메모리에만 있어서, 화면을 닫거나 새로고침하면 사라지고 다시 승인받아야 합니다.</p>
+      기기 키와 로그인 기록은 이 화면의 메모리에만 있어서, 화면을 닫거나 새로고침하면 사라지고 다시 로그인하고 승인받아야 합니다.</p>
       <p id="device-text" role="status" aria-live="polite">아직 승인을 요청하지 않았습니다.</p>
       <div class="actions">
         <button id="device-request" type="button">이 기기 승인 요청</button>
@@ -88,23 +88,11 @@
   <script>
     // 이 화면은 인증 서비스를 직접 부르지 않고 키도 갖지 않습니다. 로그인·메모 요청은 모두 이 사이트의 서버 함수
     // (/api/login, /api/refresh, /api/notes)로만 갑니다. 비밀번호는 저장하지 않습니다.
-    // 로그인 기록(토큰)은 이 탭에만 둡니다(탭을 닫으면 사라짐). 막혀 있으면 이 화면을 여는 동안만 메모리에 둡니다.
-    const SESSION_KEY = 'vault.session';
+    // 로그인 기록(토큰)은 이 화면의 메모리 변수에만 두고 브라우저 저장소·쿠키에 쓰거나 읽지 않습니다.
+    // 화면을 닫거나 새로고침하면 사라지므로 다시 로그인해야 합니다.
     let memorySession = null;
-    const loadSession = () => {
-      try {
-        const saved = JSON.parse(window.sessionStorage.getItem(SESSION_KEY));
-        if (saved && typeof saved.access_token === 'string' && typeof saved.refresh_token === 'string') return saved;
-      } catch { /* 저장소가 막혀 있거나 값이 깨졌으면 메모리 값을 씁니다. */ }
-      return memorySession;
-    };
-    const saveSession = (session) => {
-      memorySession = session;
-      try {
-        if (session) window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-        else window.sessionStorage.removeItem(SESSION_KEY);
-      } catch { /* 막혀 있으면 메모리 값만 씁니다. */ }
-    };
+    const loadSession = () => memorySession;
+    const saveSession = (session) => { memorySession = session; };
 
     const $ = (id) => document.getElementById(id);
     const list = $('notes');
@@ -133,7 +121,7 @@
     window.addEventListener('online', () => { syncOffline(); if (device && !$('create').hidden) loadNotes(); });
 
     // ---- 기기 승인 (11단계 제작 2) ----
-    // 기기 키는 이 화면의 메모리 변수에만 둡니다. localStorage·sessionStorage·IndexedDB·쿠키에 넣지 않습니다.
+    // 기기 키는 이 화면의 메모리 변수에만 둡니다. 브라우저 저장소와 쿠키에 넣지 않습니다.
     // 개인키는 꺼낼 수 없는 키(extractable=false)라서 서버로 보낼 수도, 글자로 볼 수도 없습니다. 서버에는 공개키만 갑니다.
     // 승인 요청 버튼은 요청만 보냅니다. 자료실은 서버가 서명된 보호 요청에 200을 줄 때에만 열립니다.
     let device = null;

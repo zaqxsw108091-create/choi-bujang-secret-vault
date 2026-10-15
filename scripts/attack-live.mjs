@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { loginForTokens } from '../src/live-credentials.mjs';
 import { ask } from '../src/prompt.mjs';
+import { prepareLiveDevices } from '../src/regression-table.mjs';
 
 const root = new URL('../', import.meta.url);
 const config = JSON.parse(readFileSync(new URL('aleph.config.json', root), 'utf8'));
@@ -29,11 +30,25 @@ try {
     stop(`${result.message} (보낸 로그인 요청: ${result.requests}번)`);
   } else {
     console.log(`\n로그인 요청 ${result.requests}번 성공. 토큰은 화면에 표시하지 않습니다. 점검을 시작합니다.\n`);
+    // 11단계부터는 보호 경로에 승인된 기기의 서명이 필요합니다. 두 계정의 기기를 만들어 승인 요청을 보내고, 학생이 서버에서 승인한 뒤 계속합니다.
+    if (config.step >= 11) {
+      const prepared = await prepareLiveDevices({
+        app: new URL(config.publicAppUrl), tokens: result.tokens,
+        waitForApproval: async ({ devices }) => {
+          console.log('두 계정의 기기 승인 요청을 보냈습니다. 자료실 주인이 Supabase SQL Editor에서 sql/11-devices.sql의 [B]로 아래 확인 코드를 대조하고 [C]로 승인하세요.');
+          for (const { name, code } of devices) console.log(`  ${name === 'OWNER' ? 'B(메모 주인)' : 'A(다른 계정)'} 기기 확인 코드: ${code}`);
+          await ask('두 기기를 승인했으면 Enter를 누르세요(승인하지 않고 누르면 두 계정 점검은 확인하지 못함으로 남음): ');
+        },
+      });
+      for (const note of prepared.notes) console.log(`  참고: ${note}`);
+      globalThis[Symbol.for('aleph.attack.devices')] = prepared.devices;
+    }
     process.env.ATTACK_TOKEN_OWNER = result.tokens.OWNER;
     process.env.ATTACK_TOKEN_OTHER = result.tokens.OTHER;
     await import('./bundle.mjs');
     delete process.env.ATTACK_TOKEN_OWNER;
     delete process.env.ATTACK_TOKEN_OTHER;
+    delete globalThis[Symbol.for('aleph.attack.devices')];
     try {
       const bundle = JSON.parse(readFileSync(new URL('artifacts/submission.json', root), 'utf8'));
       console.log('\n두 계정·anon 점검 결과:');

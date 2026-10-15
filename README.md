@@ -498,3 +498,109 @@
 ### 11단계 보강: 로그인 토큰도 브라우저 저장소에서 뺌 (2026-10-15)
 
 첫 제출에서 심판이 `S11_KEY_EXPOSED`(50/100)로 판정했습니다. 화면의 `saveSession`이 로그인 세션 전체를 브라우저 저장소(`sessionStorage`)에 넣어 토큰이 남는다는 지적이었고, 기기 키만 메모리에 두고 로그인 토큰은 3단계 때부터 저장소에 두었던 것을 놓친 것이 원인입니다. `public/index.html`의 `loadSession`·`saveSession`을 메모리 변수만 쓰게 바꿔 브라우저 저장소 사용을 모두 없앴습니다(저장소·쿠키 사용처 검색 결과 0건). 그 대가로 새로고침하면 다시 로그인해야 합니다. 로그인·자료실 흐름은 그대로이며 시험과 화면 확인은 이 보강 뒤에 다시 했습니다.
+
+## 12단계 제작 2: 1~11단계 정상·금지 요청 회귀표
+
+`npm run matrix`(`scripts/regression-table.mjs`, 코드는 `src/regression-table.mjs`)가 배포 주소로 1~11단계의 정상·금지 요청을 **실제로** 보내고, 한 줄에 단계 · 구분 · 요청 · 기대 · 실제 · 요청 ID · 확인 시각 · 판정을 적은 표를 `artifacts/regression-table.md`(와 `.json`)에 만듭니다. `artifacts/`는 커밋하지 않습니다.
+
+- **판정 규칙**: 실제 응답의 HTTP 상태와 짧은 오류 코드가 기대와 같을 때만 `통과`, 다르면 `실패`입니다. 요청을 보내지 못하면 `확인하지 못함`, 보내지 않은 줄은 `미실행`입니다. 이 둘은 통과가 아닙니다. 심판의 판정이 아닌 학생의 자기 점검입니다.
+- **요청 ID**: 서버가 응답 머리글(`x-vercel-id`)로 돌려준 값입니다. Vercel Logs에서 같은 ID로 그 요청을 찾아 대조할 수 있습니다.
+- **항상 미실행인 줄**: 6·7단계 판정기와 9단계 탐지는 배포 서버에서 부를 API가 없고(운영 반 엔진의 몫), 12단계 **41종 공격 방어 시험은 목록과 실행 수단이 이 저장소에 없어 실행하지 않았습니다.** 이 줄은 통과로 바뀌지 않습니다. 로컬 연습(`npm run decider:test`, `npm run fixture:7`, `npm run detect:test`)은 실제 API 결과가 아닙니다.
+- **표에 넣지 않는 것**: 토큰·비밀번호·anon 키·기기 개인키·메모 제목과 본문·사용자 ID. 시험 메모는 `회귀표 가상 메모` 한 건을 만들었다가 지웁니다(복구용 비공개 사본 한 줄은 남습니다).
+
+### 실행 순서 (학생, 자기 터미널에서)
+
+1. `git pull` 뒤 `npm.cmd ci`. 배포가 이 커밋으로 `Ready`인지 `/aleph.json`의 커밋으로 확인합니다.
+2. `npm.cmd run matrix`. 시험 계정 **A**와 **B**(서로 다른 계정)의 이메일·비밀번호를 묻습니다. 로그인 요청은 정확히 2번이며 실패하면 다시 시도하지 않고 멈춥니다. 공개 anon 키는 Enter로 건너뛸 수 있고, 건너뛰면 그 줄은 `미실행`입니다.
+3. 기기 확인 코드 두 개(A·B)가 나오면, Supabase SQL Editor에서 `sql/11-devices.sql`의 [B]로 코드를 대조하고 [C]로 **그 두 기기만** 승인한 뒤 터미널에서 Enter를 누릅니다. 세 번째 기기(승인 전 기기 거부 시험용)는 승인하지 않습니다. 승인하지 않고 Enter를 누르면 그 뒤 서명 요청은 `미실행`으로 남습니다.
+4. 끝나면 표가 출력되고 파일로 저장됩니다. 실패가 있으면 종료 코드 2입니다.
+5. 정상 결과: 정상 줄은 `HTTP 200/201`, 금지 줄은 `401 LOGIN_REQUIRED`·`403 FORBIDDEN`·`403 DEVICE_REQUIRED`·`403 DEVICE_NOT_APPROVED`·`404`로 `통과`. 거부되어야 할 줄이 `200`이면 `실패`이며 큰 문제입니다.
+6. 한계: 한 번 실행할 때마다 승인 안 된 기기(`pending`) 한 건이 A 계정에 남고, 계정당 대기 5건에서 `TOO_MANY_PENDING`이 납니다. 쌓이면 서버에서 대기 행을 정리한 뒤 다시 하세요.
+
+### 실행 기록 (12단계 제작 2)
+
+| 항목 | 방법 | 결과 | 실행 여부 |
+| --- | --- | --- | --- |
+| 표 생성 로직 시험 | `node --test test/regression-table.test.mjs` (실제 서버 코드를 가짜 DB 위에서 돌림) | 5건 통과: 정상·금지 줄 모두 기대대로 `통과`, 기기 미승인이면 서명 요청은 `미실행`, 접속 실패는 `확인하지 못함`, 표에 비밀값 없음 | 실행함 (가짜 DB, 배포 결과 아님) |
+| 배포 서버에 실제 요청 | `npm run matrix` | — | **미실행** (코딩 도구 환경은 외부 접속이 막혀 있고 학생의 두 계정이 필요함) |
+| 41종 공격 방어 시험 | — | — | **미실행** |
+
+## 12단계 제작 3: 설치·실행·중지·복구 안내
+
+**검사한 커밋: `d1b8182`**(전체 해시 `d1b81824e324552fc253524908b0a7b2f813613c`, 브랜치 `claude/vibrant-tesla-fr27vq`, 이 절을 쓰기 직전). 아래 "재현 순서"의 로컬 명령은 이 커밋 위에서, 작업 폴더가 깨끗한 상태로 실행했습니다. 이 절을 담은 커밋은 그 다음 커밋이라 해시가 다릅니다. 배포된 사이트가 이 커밋인지는 `/aleph.json`의 `commit`으로 직접 대조해야 하며, 코딩 도구는 배포 사이트에 접속하지 못해 확인하지 못했습니다.
+
+### 누가 만들었나: 제공 엔진과 학생 몫
+
+| 구분 | 무엇 | 출처 |
+| --- | --- | --- |
+| **ALEPH SDP 엔진(제공, 이 저장소에 코드 없음)** | 요청의 신원·기기·경로를 확인한 뒤 `aleph.decision.v1` 계약으로 판정기를 부르고, 검증한 사건을 전달하며, 접속 회수를 집행하는 운영 쪽 엔진 | 출처: ALEPH SDP 엔진(운영 측). 이 저장소에서는 계약 문서 [`docs/DECIDER_REQUEST.md`](docs/DECIDER_REQUEST.md)·[`docs/DETECT_EVENTS.md`](docs/DETECT_EVENTS.md)로만 알 수 있고, **엔진과 이 서버가 실제로 연결됐다는 것은 확인하지 못했습니다.** 이 서버의 기기 승인(`devices` 표)은 엔진이 전달하는 `deviceRegistered`와 다른 장치입니다 |
+| 시작 틀(제공, 이후 수정 없음 — `git log`에 시작 틀 병합 커밋 `917753a` 하나뿐) | `src/verify-login.mjs`(로그인 토큰 검사), `scripts/bundle.mjs`(제출 묶음), `scripts/decider-test.mjs`·`scripts/detect-test.mjs`(가상 연습), `package/*` 안내문, `xdr/fixtures/*`(수업용 가상 경보) | 시작 틀 `BYTE BACK 방어전 시작 틀 R5` |
+| 시작 틀에서 출발해 학생이 고침 | `scripts/build-public.mjs`, `scripts/deployment-identity.mjs`, `src/attack-check.mjs`, `scripts/xdr-run.mjs`, `src/decider.mjs`·`src/detect.mjs`(빈 틀을 채움) | 시작 틀 + 학생 |
+| **학생 몫** | **판정기 규칙 5개**(`src/decider.mjs`), **탐지 규칙 `burst_read`**(`src/detect.mjs`), **접속 앱**(`public/index.html`, `public/manifest.webmanifest`, 기기 서명 `src/device-gate.mjs`), **자료실 서버**(`api/*.js`, `src/notes-api.mjs`, `src/auth-api.mjs`, `src/note-restore.mjs`, `src/policy-*.mjs`, `src/ops-summary.mjs`, `src/xdr-*.mjs`), XDR 보너스 판단 `xdr/brute-force/`·`xdr/web-injection/`, 회귀표 `src/regression-table.mjs`, SQL `sql/*.sql` | 학생(코딩 도구의 도움으로 작성, 학생이 검토·실행) |
+
+`src/decider.mjs`가 읽는 값은 계약에 있는 이름뿐이고(`request.deviceRegistered`, `request.stepUp`, `request.signals` 등), 계약에 없는 `request.device`·`request.identity`·`request.geo`·`request.role`은 쓰지 않습니다.
+
+### 비밀값은 포장하지 않습니다
+
+- 이 저장소·제출 묶음·이 안내에는 비밀번호, 로그인 토큰, 서버 전용 키(`SUPABASE_SECRET_KEY`), 기기 개인키, 실제 개인정보, 메모 본문이 **없습니다.** 환경변수는 이름만 [`.env.example`](.env.example)에 있습니다(`SUPABASE_URL`, `SUPABASE_SECRET_KEY`, 선택 `XDR_BLOCK_STORE`).
+- 값은 학생이 **Vercel 프로젝트의 Settings > Environment Variables 입력란**에 직접 넣습니다(코드·Git·채팅에 적지 않음). 값을 바꾼 뒤에는 다시 배포해야 반영됩니다.
+- 터미널에서 계정이 필요한 명령(`npm run matrix`, `npm run attack:live`)은 비밀번호를 화면에 보이지 않게 받고 저장·출력하지 않습니다. 기기 개인키는 브라우저·프로세스 메모리에만 있고 꺼낼 수 없는 키입니다.
+- `.gitignore`가 `.env*`, `supabase/`(메모 본문이 든 SQL), `bundle-notes.json`, `artifacts/`(제출 묶음·회귀표)를 Git에서 뺍니다. 커밋·푸시 전에 `npm run check:secrets`를 실행합니다.
+
+### 설치
+
+- **로컬(학생 컴퓨터)**: Node 22 이상. 저장소를 받고 `npm ci`. 따로 설치하는 접속 프로그램은 없습니다.
+- **자료실 서버**: (1) Supabase 학습 프로젝트에서 SQL Editor로 `sql/2-notes-schema.sql`, `sql/4-notes-owner.sql`(이메일은 실행할 때 화면에서만 바꿈), `sql/4-notes-rls.sql`, `sql/5-notes-revoke-direct.sql`, `sql/10-notes-backup.sql`, `sql/11-devices.sql`의 [A]를 이 순서로 직접 실행합니다(보너스 공유 차단은 `sql/xdr-1-block-rules.sql`). (2) Vercel에 저장소를 연결하고 위 환경변수를 넣어 배포합니다. 코딩 도구는 DB에 접속하지 않았고 SQL을 실행하지 않았습니다.
+- **접속 앱(설치형 웹앱)**: 배포 주소를 Chrome에서 열면 주소창의 설치 아이콘으로 설치할 수 있습니다(Chrome 외 브라우저는 확인하지 못함). 설치했다는 표시는 기기 신뢰의 근거가 아닙니다.
+
+### 실행
+
+- **판정기·탐지(가상 연습)**: `npm run decider:test`, `npm run fixture:7`, `npm run detect:test`. 가상 요청·가상 사건이며 운영 엔진 결과나 심판 통과 증거가 아닙니다.
+- **자료실**: 배포 주소에서 로그인 → **이 기기 승인 요청** → 자료실 주인이 SQL Editor에서 `sql/11-devices.sql`의 [B]로 확인 코드를 대조하고 [C]로 승인 → **상태 확인**. 승인 뒤 메모 추가·수정·삭제와 "탈환 작전실 요약"이 보입니다. 화면을 닫거나 새로고침하면 로그인과 기기 키가 사라져 다시 해야 합니다.
+- **로컬 화면만**: `npm run build -- --local`은 정적 화면을 만들 뿐 서버 함수(로그인·메모)를 띄우지 않습니다. 로컬에서 서버 함수를 띄우는 방법은 시험하지 않았습니다.
+
+### 중지
+
+- **한 사용자·기기만 멈추기**: 화면의 **로그아웃**(또는 탭 닫기). 서버에서는 `sql/11-devices.sql`의 [C] 회수 문장으로 승인된 기기 한 건을 `revoked`로 바꾸면 그 기기의 보호 요청이 `403 DEVICE_NOT_APPROVED`가 됩니다(회수 뒤 화면은 보이던 자료를 지웁니다).
+- **주소 하나 막기**: 보너스 XDR 차단 규칙(`node xdr/web-injection/link.mjs --db`로 올림, 1시간 뒤 만료). 서버에서는 Vercel 환경변수 `XDR_BLOCK_STORE`를 비우고 다시 배포하면 공유 저장소 조회가 꺼집니다.
+- **자료실 서버 전체 멈추기**: Vercel의 `SUPABASE_SECRET_KEY` 환경변수를 지우고 다시 배포하면 코드상 모든 보호 경로가 `500 SERVER_NOT_CONFIGURED`로 닫힙니다(코드와 시험으로만 확인, 실제 배포에서는 확인하지 못함). 이전 배포로 되돌리는 방법은 Vercel 화면의 배포 목록을 따릅니다.
+- **학생 판정기·탐지 코드를 멈추기**: 이 서버에는 판정기·탐지를 켜고 끄는 스위치가 없고, 운영 엔진이 부릅니다. 코드를 바꿨다면 `git revert <커밋>`으로 되돌립니다(`git reset --hard`는 쓰지 않습니다).
+
+### 복구
+
+1. **정책**: `npm run policy:diff`로 검증된 사본 `policy/policy-snapshot.json`과 현재 시험 정책의 차이만 봅니다(바꾸지 않음). 차이가 있으면 `npm run policy:restore`가 바뀔 항목을 보여 주고, 화면의 확인 코드로 `--apply`를 실행합니다. 판정기 규칙 이름 차이는 이 절차가 못 되돌리므로 코드를 직접 확인합니다.
+2. **메모 한 건**: 비공개 사본(`notes_backup`)에서 `POST /api/restore`(`{"id":"<메모 id>"}`)가 본인 메모 한 건만 되살립니다. 사본의 ID·소유자·내용 해시를 다시 대조하고, 맞지 않으면 409로 멈추며, 감사 기록은 덧붙이기만 합니다.
+3. **기기**: 회수된 기기는 되살리지 않고, 화면에서 새 승인 요청을 보내 [B]·[C]로 다시 승인합니다.
+4. **코드**: 변경 커밋을 `git revert`로 되돌린 뒤 같은 재현 순서를 다시 실행합니다. 되돌릴 때는 `git status`와 `git diff`로 이번 변경과 다른 변경을 먼저 구분합니다.
+
+### 재현 순서 (이 커밋에서 처음부터)
+
+1. `git clone <repoUrl>` 후 `git checkout d1b8182`(또는 지금 `main`), `npm ci`.
+2. `node --test test/*.mjs` — 기대: 전부 통과(가짜 DB 시험).
+3. `npm run decider:test`, `npm run fixture:7`, `npm run detect:test` — 기대: 통과 줄 또는 `allow`·`step_up`(가상 연습).
+4. `npm run policy:diff` — 기대: `변경 범위: 없음`.
+5. `npm run check:secrets`, `npm run build -- --local` — 기대: 키처럼 보이는 문자열 없음.
+6. (배포 뒤, 학생) `/aleph.json`의 `commit`이 위 커밋 또는 그 이후 병합 커밋인지 확인한 다음 `npm.cmd run matrix`. 금지 요청이 거부(401·403·404)되고 정상 요청이 허용(200·201)되는 줄이 요청 ID와 함께 표에 남아야 합니다. 이 순서의 결과는 심판의 판정이 아닙니다.
+
+### 실행 기록 (12단계 제작 3)
+
+| 항목 | 방법 | 결과 | 실행 여부 |
+| --- | --- | --- | --- |
+| 전체 로컬 시험 | `node --test test/*.mjs`, 커밋 `d1b8182`, 코딩 도구 환경 | 232건 중 232건 통과(가짜 DB) | 실행함 (2026-10-15) |
+| 판정기·가상 사건 | `npm run decider:test`, `npm run fixture:7`, `npm run detect:test` | 통과 줄만 표시됨, 정상 `allow`·복합 이상 `step_up`(가상 연습, 심판 아님) | 실행함 (2026-10-15) |
+| 정책 사본 | `npm run policy:diff` | 사본 검증 통과, 변경 범위 없음 | 실행함 (2026-10-15) |
+| 비밀값·빌드 | `npm run check:secrets`, `npm run build -- --local` | 추적 파일 107개에서 키처럼 보이는 문자열 없음, 공개 폴더 검사 통과 | 실행함 (2026-10-15) |
+| 배포가 이 커밋인지, 설치형 앱 설치, 서버 중지·복구 절차의 실제 동작 | 배포 주소·Supabase·Vercel 화면 | — | **미실행** (코딩 도구 환경은 외부 접속이 막혀 있음) |
+| ALEPH SDP 엔진과의 실제 연결(판정·사건 전달·접속 회수) | — | 이 저장소에서 확인할 수 없음 | **미확인** |
+| 41종 공격 방어 시험 | — | — | **미실행** |
+
+### 12단계 저장점: 지금 작동하는 기능과 다시 실행하는 방법
+
+- 작동하는 기능: 11단계까지(로그인, 메모 소유자 검사, 기기 승인과 서명, 복구, 판정기 규칙 5개, 탐지 `burst_read`)에 더해, 자료실 화면의 **탈환 작전실 요약**(`GET /api/ops`, 확인됨·미실행 구분, 서버 로그 한 줄과 대조), **회귀표**(`npm run matrix`), 설치·실행·중지·복구 안내(위 "12단계 제작 3")가 있습니다.
+- 설정 대조(2026-10-15): `aleph.config.json`은 `step` 12(빌드 `scripts/build-public.mjs`, 배포 식별 `scripts/deployment-identity.mjs`, `src/attack-check.mjs`의 허용 단계에 12를 더함), `repoUrl`은 Git `origin`과 같은 주소, `publicAppUrl`은 `https://choi-bujang-secret-vault-tr33.vercel.app`, `judgeIssuer`·`identityProvider`·`originalApiUrl`·`restoreRoute`·`allowedRoutes` 7개는 바꾸지 않았습니다(`/api/ops`는 `/api/restore`·`/api/device`처럼 정책 사본 범위 밖이라 넣지 않음). `src/decider.mjs`의 `RULE_IDS` 5개는 모두 구현한 규칙이며 이번 단계에서 판정기는 바꾸지 않았습니다.
+- `src/attack-check.mjs`의 12단계 점검은 11단계와 같은 20개입니다. 로그인 없이 보내는 요청만 실제로 보내고, 두 계정이 필요한 5개는 환경변수를 넣지 않으면 미실행입니다. 심판의 판정이 아닙니다. `GET /api/ops`의 로그인 없음 거부는 자동 점검에 넣지 않았고 회귀표·시험에서 확인합니다.
+- **직접 확인할 것 세 가지**
+  1. **실제 API 결과와 화면 표시가 일치하는가?** 자료실을 연 뒤 "탈환 작전실 요약"의 "서버 기록과 대조할 줄"이 Vercel Logs의 `ops 요약:` 줄과 같은 글자인지 봅니다. 가짜 DB 시험(`test/ops-summary.test.mjs`)에서는 응답의 `logLine`과 서버 로그가 같음을 확인했고, **배포에서는 아직 확인하지 못했습니다(미실행).**
+  2. **41종 시험의 실행·미실행을 구별했는가?** 41종 공격 방어 시험은 **미실행**입니다. 회귀표에도 통과로 쓰지 않고 `미실행` 줄로 고정했습니다(목록과 실행 수단이 이 저장소에 없음). 회귀표 `npm run matrix`도 코딩 도구 환경에서는 배포에 접속할 수 없어 **실행하지 않았습니다.**
+  3. **제공 엔진과 학생 작업의 출처를 밝혔는가?** "12단계 제작 3"의 출처 표에 ALEPH SDP 엔진(제공, 이 저장소에 코드 없음, 연결 미확인)·시작 틀·학생 몫을 나눠 적었습니다.
+- 다시 실행: `npm ci`, `node --test test/*.mjs`, `npm run decider:test`, `npm run detect:test`, `npm run check:secrets`, 일반 커밋 위에서 `npm run bundle`(커밋하지 않는 `bundle-notes.json`의 `explanation` 필요, 결과 `artifacts/submission.json`도 커밋하지 않음).

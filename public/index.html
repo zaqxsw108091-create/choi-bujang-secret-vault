@@ -81,6 +81,12 @@
       <label>내용 <textarea id="new-body" maxlength="5000"></textarea></label>
       <button id="create-submit" type="submit">메모 추가</button>
     </form>
+    <section id="ops" class="status" aria-label="탈환 작전실 요약" hidden>
+      <p><strong>탈환 작전실 요약</strong> — 서버가 이번 요청에서 실제로 읽은 숫자만 "확인됨"으로 적습니다. 운영 엔진과 이어지지 않은 항목은 "미실행"이며, 메모 제목·본문은 싣지 않습니다.</p>
+      <dl id="ops-list"></dl>
+      <p id="ops-log"></p>
+      <div class="actions"><button id="ops-refresh" type="button">요약 다시 불러오기</button></div>
+    </section>
     <div id="message" role="status" aria-live="polite"></div>
     <ul id="notes" aria-live="polite"><li>로그인하면 내 가상 메모가 보입니다.</li></ul>
   </main>
@@ -153,13 +159,42 @@
       DEVICE_CHECK_FAILED: '서버가 기기를 확인하지 못해 자료를 열지 않았습니다.',
     };
     const deviceText = (text) => { $('device-text').textContent = text; };
-    const vaultLocked = () => { $('create').hidden = true; placeholder('기기 승인 전에는 자료를 표시하지 않습니다.'); };
+    const vaultLocked = () => { $('create').hidden = true; $('ops').hidden = true; placeholder('기기 승인 전에는 자료를 표시하지 않습니다.'); };
+
+    // ---- 탈환 작전실 요약 (12단계 제작 1) ----
+    // 서버(/api/ops)가 준 숫자·이름만 그대로 그립니다. 화면이 값을 만들어 채우지 않으며, 'verified'가 아닌 항목은 확인됨으로 보이지 않습니다.
+    const STATE = { not_run: '미실행', unread: '읽지 못함' };
+    const opsRow = (label, text) => {
+      const dt = document.createElement('dt'); dt.textContent = label;
+      const dd = document.createElement('dd'); dd.textContent = text;
+      $('ops-list').append(dt, dd);
+    };
+    const opsState = (item, ok) => (item?.state === 'verified' ? `확인됨 (서버 응답) · ${ok(item)}` : (STATE[item?.state] ?? '읽지 못함'));
+    const num = (value) => (Number.isInteger(value) ? String(value) : '?');
+    function showOps(s) {
+      $('ops-list').replaceChildren();
+      opsRow('판정기 규칙', opsState(s.decider, (d) => `${num(d.ruleCount)}개 (${(d.ruleIds ?? []).join(', ')}) · 코드 목록`));
+      opsRow('운영 엔진 판정', opsState(s.decider?.engineDecisions));
+      opsRow('탐지 기준', `${s.detection?.burstRule?.reasonCode ?? '?'}: ${num(s.detection?.burstRule?.windowMinutes)}분 안에 조회 ${num(s.detection?.burstRule?.limit)}건 초과 (코드 상수)`);
+      opsRow('탐지 사건(차단 규칙)', opsState(s.detection?.activeBlockRules, (d) => `만료 전 ${num(d.count)}건`));
+      opsRow('운영 엔진 사건 전달', opsState(s.detection?.engineEvents));
+      opsRow('내 기기(회수 상태)', opsState(s.revocation?.devices, (d) => `승인 ${num(d.approved)} · 대기 ${num(d.pending)} · 회수 ${num(d.revoked)}`));
+      opsRow('접속 회수 집행', opsState(s.revocation?.engineRevocation));
+      opsRow('복구 사본', opsState(s.restore?.backups, (d) => `${num(d.count)}건${d.versions?.length ? ` · 버전 ${d.versions.map(v => `${v.note}:${v.version ?? '?'}`).join(', ')}` : ''}`));
+      opsRow('복구 감사 기록', opsState(s.restore?.audit, (d) => `${num(d.count)}건`));
+      $('ops-log').textContent = `서버 기록과 대조할 줄(Vercel 로그에 같은 글자가 남음): ${s.logLine ?? '없음'}`;
+      $('ops').hidden = false;
+    }
+    async function loadOps() {
+      try { showOps(await api('GET', '/api/ops')); } catch (error) { $('ops-log').textContent = `작전실 요약을 불러오지 못했습니다. ${error.message}`; $('ops').hidden = false; }
+    }
+    $('ops-refresh').addEventListener('click', loadOps);
     const stopPolling = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } };
     // 서버가 승인했다고 알려도 화면을 바로 열지 않고, 서명한 보호 요청이 200으로 돌아올 때에만 엽니다.
     async function unlock() {
       const ok = await loadNotes();
       $('create').hidden = !ok;
-      if (ok) { stopPolling(); deviceText('서버가 이 기기를 등록 기기로 확인했습니다.'); $('device-request').hidden = true; $('device-refresh').hidden = true; }
+      if (ok) { stopPolling(); deviceText('서버가 이 기기를 등록 기기로 확인했습니다.'); $('device-request').hidden = true; $('device-refresh').hidden = true; await loadOps(); }
       return ok;
     }
     async function checkDevice() {
@@ -366,6 +401,7 @@
       $('login').hidden = false;
       $('bar').hidden = true;
       $('create').hidden = true;
+      $('ops').hidden = true;
       $('who').textContent = '';
       showApproval('none');
       placeholder('로그인하면 내 가상 메모가 보입니다.');

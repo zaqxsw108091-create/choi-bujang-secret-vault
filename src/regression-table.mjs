@@ -176,3 +176,37 @@ export function renderTable(rows) {
   ];
   return `${lines.join('\n')}\n`;
 }
+
+// attack:live용: 시험 계정 두 개의 기기를 만들어 승인 요청(항상 pending)을 보내고, 학생이 서버에서 승인한 뒤 상태가 approved인 기기만 돌려줍니다.
+// 반환: { devices: {OWNER?, OTHER?}, notes: [문구] }. 승인되지 않았거나 요청이 실패한 계정은 빠지고 이유를 notes에 적습니다(토큰·키 값은 쓰지 않음).
+export async function prepareLiveDevices({ app, tokens, fetchFn = fetch, waitForApproval }) {
+  const notes = [];
+  const made = {};
+  const send = async (token, method, path, body) => {
+    const response = await fetchFn(new URL(path, app), { method, redirect: 'manual', signal: AbortSignal.timeout(10000),
+      headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      body: body === undefined ? undefined : JSON.stringify(body) });
+    let json = null;
+    try { json = JSON.parse(await response.text()); } catch { /* JSON이 아니면 앱의 응답으로 보지 않습니다. */ }
+    return { status: response.status, json };
+  };
+  for (const name of ['OWNER', 'OTHER']) {
+    try {
+      const device = await newDevice();
+      const res = await send(tokens[name], 'POST', '/api/device', { publicKey: device.publicKey });
+      if (![200, 201].includes(res.status)) { notes.push(`${name} 기기 승인 요청이 거절됨(HTTP ${res.status}${typeof res.json?.error === 'string' ? `, ${res.json.error}` : ''})`); continue; }
+      made[name] = device;
+    } catch { notes.push(`${name} 기기 승인 요청을 보내지 못함`); }
+  }
+  if (!Object.keys(made).length) return { devices: {}, notes };
+  await waitForApproval({ devices: Object.entries(made).map(([name, device]) => ({ name, code: device.code })) });
+  const devices = {};
+  for (const [name, device] of Object.entries(made)) {
+    try {
+      const res = await send(tokens[name], 'GET', `/api/device?keyId=${device.keyId}`);
+      if (res.status === 200 && res.json?.status === 'approved') devices[name] = device;
+      else notes.push(`${name} 기기가 아직 승인되지 않음(상태 ${typeof res.json?.status === 'string' ? res.json.status : `HTTP ${res.status}`})`);
+    } catch { notes.push(`${name} 기기 상태를 확인하지 못함`); }
+  }
+  return { devices, notes };
+}

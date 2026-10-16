@@ -12,7 +12,7 @@ const NOTE = 'dddddddd-dddd-4ddd-8ddd-ddddddddddd1';
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 // 가짜 배포. mode: 'refuse'(403) | 'open'(200) | 'same'(A도 같은 메모를 가진 같은 계정) | 'empty'(B에게 메모가 없음)
-function fakeDeployment(sent, mode = 'refuse') {
+function fakeDeployment(sent, mode = 'refuse', needDevice = false) {
   return async (url, init = {}) => {
     const u = new URL(String(url));
     const auth = init.headers?.Authorization ?? null;
@@ -23,6 +23,7 @@ function fakeDeployment(sent, mode = 'refuse') {
     if (u.pathname === '/') return new Response('<html>화면</html>');
     if (u.pathname === '/api/login') return json({ error: 'LOGIN_FAILED' }, 401);
     if (!auth) return json({ error: 'LOGIN_REQUIRED' }, 401);
+    if (needDevice && !init.headers?.['X-Device-Key'] && (u.pathname.startsWith('/api/notes') || u.pathname === '/api/restore')) return json({ error: 'DEVICE_REQUIRED' }, 403);
     if (u.pathname === '/api/notes' && (init.method ?? 'GET') === 'GET') {
       if (auth === `Bearer ${OWNER}`) return json(mode === 'empty' ? [] : [{ id: NOTE, title: '가상 제목', body: '가상 본문' }]);
       return json(mode === 'same' ? [{ id: NOTE, title: '가상 제목', body: '가상 본문' }] : []);
@@ -31,13 +32,13 @@ function fakeDeployment(sent, mode = 'refuse') {
   };
 }
 
-async function run({ env = {}, mode = 'refuse', step = 10 } = {}) {
+async function run({ env = {}, mode = 'refuse', step = 10, needDevice = false } = {}) {
   const sent = [];
   const real = globalThis.fetch;
   const saved = {};
   for (const name of ['ATTACK_TOKEN_OWNER', 'ATTACK_TOKEN_OTHER', 'ATTACK_ANON_KEY']) { saved[name] = process.env[name]; delete process.env[name]; }
   Object.assign(process.env, env);
-  globalThis.fetch = fakeDeployment(sent, mode);
+  globalThis.fetch = fakeDeployment(sent, mode, needDevice);
   try { return { results: await runAttackChecks({ ...config, step }), sent }; } finally {
     globalThis.fetch = real;
     for (const [name, value] of Object.entries(saved)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
@@ -118,4 +119,15 @@ test('점검 코드와 이 시험 파일에 키·토큰 모양의 실제 값이 
   const files = ['../src/attack-check.mjs', './attack-check-live.test.mjs']
     .map(path => [path, readFileSync(new URL(path, import.meta.url), 'utf8')]);
   assert.deepEqual(findSecrets(files), []);
+});
+
+test('11단계 이후: 기기 서명이 없으면 확인하지 못함(원인 안내), 승인된 기기의 서명을 걸면 거부됨으로 적는다', async () => {
+  const without = await run({ env: BOTH, step: 12, needDevice: true });
+  for (const id of CROSS) assert.match(observed(without.results, id), /^확인하지 못함 \(B 계정의 메모 목록을 읽지 못함: HTTP 403, 11단계부터는 승인된 기기의 서명이 필요함\)$/u, id);
+  const key = Symbol.for('aleph.attack.devices');
+  globalThis[key] = { OWNER: { proof: async () => ({ 'X-Device-Key': 'owner-device' }) }, OTHER: { proof: async () => ({ 'X-Device-Key': 'other-device' }) } };
+  try {
+    const withDevice = await run({ env: BOTH, step: 12, needDevice: true });
+    for (const id of CROSS) assert.equal(observed(withDevice.results, id), '거부됨 (HTTP 403)', id);
+  } finally { delete globalThis[key]; }
 });

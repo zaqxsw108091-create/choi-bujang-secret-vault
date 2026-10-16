@@ -262,18 +262,26 @@ async function runCrossOwnerChecks(doFetch, app, step) {
   if (typeof owner !== 'string' || typeof other !== 'string' || !LOGIN_TOKEN.test(owner) || !LOGIN_TOKEN.test(other)) {
     return defs.map(({ attackId, expected, unrun: observed }) => ({ attackId, expected, observed }));
   }
-  const call = (token, method, path, body) => doFetch(new URL(path, app), {
-    method, redirect: 'error', signal: AbortSignal.timeout(10000),
-    headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  // 11단계부터 보호 경로는 승인된 기기의 서명도 요구합니다. scripts/attack-live.mjs가 승인된 기기를 이 프로세스 안에만 걸어 두면
+  // 그 기기의 서명 머리글을 함께 보냅니다(개인키는 꺼낼 수 없는 키이고 값은 쓰지 않음). 없으면 토큰만 보내 서버가 거부할 수 있습니다.
+  const devices = globalThis[Symbol.for('aleph.attack.devices')];
+  const call = async (token, method, path, body) => {
+    const bodyText = body === undefined ? '' : JSON.stringify(body);
+    const device = token === owner ? devices?.OWNER : devices?.OTHER;
+    const proof = typeof device?.proof === 'function' ? await device.proof(method, path, bodyText) : {};
+    return doFetch(new URL(path, app), {
+      method, redirect: 'error', signal: AbortSignal.timeout(10000),
+      headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...proof },
+      body: body === undefined ? undefined : bodyText,
+    });
+  };
   let target;
   try {
     // 대상: B(주인) 목록의 첫 메모 id. A 목록에 같은 id가 있으면 같은 계정이므로 보내지 않습니다(PUT·DELETE가 실제로 바꾸지 않게).
     const mine = await call(owner, 'GET', '/api/notes');
     const mineList = mine.ok ? await mine.json() : null;
     target = Array.isArray(mineList) && typeof mineList[0]?.id === 'string' ? mineList[0].id : null;
-    if (!target) return all(`확인하지 못함 (B 계정의 메모 목록을 읽지 못함: HTTP ${mine.status})`);
+    if (!target) return all(`확인하지 못함 (B 계정의 메모 목록을 읽지 못함: HTTP ${mine.status}${mine.status === 403 ? ', 11단계부터는 승인된 기기의 서명이 필요함' : ''})`);
     const theirs = await call(other, 'GET', '/api/notes');
     const theirList = theirs.ok ? await theirs.json() : null;
     if (!Array.isArray(theirList)) return all(`확인하지 못함 (A 계정의 메모 목록을 읽지 못함: HTTP ${theirs.status})`);

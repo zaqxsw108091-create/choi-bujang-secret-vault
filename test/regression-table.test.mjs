@@ -5,13 +5,14 @@ import { readFileSync } from 'node:fs';
 import { createNotesApi } from '../src/notes-api.mjs';
 import { createLoginVerifier } from '../src/verify-login.mjs';
 import { createDeviceGate, codeOf } from '../src/device-gate.mjs';
-import { createMatrix, renderTable, runRegression } from '../src/regression-table.mjs';
+import { createMatrix, prepareLiveDevices, renderTable, runRegression } from '../src/regression-table.mjs';
+import { runAttackChecks } from '../src/attack-check.mjs';
 
 const config = JSON.parse(readFileSync(new URL('../aleph.config.json', import.meta.url), 'utf8'));
 const APP = new URL('https://example.test/');
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
-const SECRET_TOKEN_PART = 'c2ln';
+const SECRET_TOKEN_PART = 'c2lnc2lnc2ln';
 const b64 = value => Buffer.from(JSON.stringify(value)).toString('base64url');
 const token = sub => `${b64({ alg: 'ES256', typ: 'JWT' })}.${b64({ iss: config.identityProvider.issuer, aud: config.identityProvider.audience, role: 'authenticated', sub, exp: Math.floor(Date.now() / 1000) + 600 })}.${SECRET_TOKEN_PART}`;
 
@@ -123,4 +124,37 @@ test('표와 JSON에 토큰·비밀번호·메모 제목·사용자 ID가 없다
   for (const secret of [tokens.A, tokens.B, SECRET_TOKEN_PART, 'anon-secret-value', 'wrong-password-for-matrix', '회귀표 가상 메모', A, B]) {
     assert.equal(text.includes(secret), false, secret);
   }
+});
+
+test('attack:live 준비: 두 계정의 기기를 승인받아 실제 서버 코드에 대한 남의 메모 점검 4개가 거부됨으로 나온다', async () => {
+  const db = world();
+  db.notes.push({ id: 'dddddddd-dddd-4ddd-8ddd-ddddddddddd1', owner_id: B, title: 'B 가상', content: 'B 본문', position: 1 });
+  db.notes_backup.push({ note_id: 'dddddddd-dddd-4ddd-8ddd-ddddddddddd1', owner_id: B, title: 'B 가상', content: 'B 본문', content_sha256: 'a'.repeat(64) });
+  const fetchFn = server(db);
+  const prepared = await prepareLiveDevices({ app: APP, tokens: { OWNER: tokens.B, OTHER: tokens.A }, fetchFn, waitForApproval: approveByCode(db) });
+  assert.deepEqual(prepared.notes, []);
+  assert.deepEqual(Object.keys(prepared.devices).sort(), ['OTHER', 'OWNER']);
+  const savedFetch = globalThis.fetch;
+  const keys = ['ATTACK_TOKEN_OWNER', 'ATTACK_TOKEN_OTHER'];
+  const savedEnv = keys.map(k => process.env[k]);
+  const sym = Symbol.for('aleph.attack.devices');
+  globalThis.fetch = fetchFn; process.env.ATTACK_TOKEN_OWNER = tokens.B; process.env.ATTACK_TOKEN_OTHER = tokens.A; globalThis[sym] = prepared.devices;
+  try {
+    const results = await runAttackChecks({ ...config, step: 12, publicAppUrl: APP.href });
+    for (const id of ['other_owner_read_refused', 'other_owner_update_refused', 'other_owner_delete_refused', 'other_owner_restore_refused']) {
+      assert.equal(results.find(r => r.attackId === id)?.observed, '거부됨 (HTTP 403)', id);
+    }
+    assert.equal(db.notes[0].title, 'B 가상', 'B의 메모는 바뀌지 않음');
+  } finally {
+    globalThis.fetch = savedFetch; delete globalThis[sym];
+    keys.forEach((k, i) => { if (savedEnv[i] === undefined) delete process.env[k]; else process.env[k] = savedEnv[i]; });
+  }
+});
+
+test('attack:live 준비: 승인하지 않으면 그 기기는 빠지고 이유가 남는다', async () => {
+  const db = world();
+  const prepared = await prepareLiveDevices({ app: APP, tokens: { OWNER: tokens.B, OTHER: tokens.A }, fetchFn: server(db), waitForApproval: async () => {} });
+  assert.deepEqual(prepared.devices, {});
+  assert.equal(prepared.notes.length, 2);
+  assert.ok(prepared.notes.every(n => n.includes('승인되지 않음')));
 });

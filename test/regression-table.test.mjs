@@ -126,7 +126,7 @@ test('표와 JSON에 토큰·비밀번호·메모 제목·사용자 ID가 없다
   }
 });
 
-test('attack:live 준비: 두 계정의 기기를 승인받아 실제 서버 코드에 대한 남의 메모 점검 4개가 거부됨으로 나온다', async () => {
+test('attack:live 준비: 두 계정의 기기를 승인받아 실제 서버 코드에 대한 남의 메모 읽기 점검이 거부됨으로 나오고 쓰기 점검 3개는 미실행으로 남는다', async () => {
   const db = world();
   db.notes.push({ id: 'dddddddd-dddd-4ddd-8ddd-ddddddddddd1', owner_id: B, title: 'B 가상', content: 'B 본문', position: 1 });
   db.notes_backup.push({ note_id: 'dddddddd-dddd-4ddd-8ddd-ddddddddddd1', owner_id: B, title: 'B 가상', content: 'B 본문', content_sha256: 'a'.repeat(64) });
@@ -141,8 +141,9 @@ test('attack:live 준비: 두 계정의 기기를 승인받아 실제 서버 코
   globalThis.fetch = fetchFn; process.env.ATTACK_TOKEN_OWNER = tokens.B; process.env.ATTACK_TOKEN_OTHER = tokens.A; globalThis[sym] = prepared.devices;
   try {
     const results = await runAttackChecks({ ...config, step: 12, publicAppUrl: APP.href });
-    for (const id of ['other_owner_read_refused', 'other_owner_update_refused', 'other_owner_delete_refused', 'other_owner_restore_refused']) {
-      assert.equal(results.find(r => r.attackId === id)?.observed, '거부됨 (HTTP 403)', id);
+    assert.equal(results.find(r => r.attackId === 'other_owner_read_refused')?.observed, '거부됨 (HTTP 403)');
+    for (const id of ['other_owner_update_refused', 'other_owner_delete_refused', 'other_owner_restore_refused']) {
+      assert.match(results.find(r => r.attackId === id)?.observed ?? '', /^미실행/u, id);
     }
     assert.equal(db.notes[0].title, 'B 가상', 'B의 메모는 바뀌지 않음');
   } finally {

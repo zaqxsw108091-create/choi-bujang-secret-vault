@@ -1,5 +1,11 @@
 // The student changes this check as each stage adds an attack to the same app.
 // Never return tokens, private keys, real names, or note bodies.
+// 이 파일은 심판의 격리된 제출 환경에서도 `npm run bundle`로 실행됩니다. 그곳에서는 공개 HTTPS 주소로 보내는 GET만 되므로,
+// 쓰기(생성·수정·삭제·로그인·복구·기기 승인)가 필요한 점검은 요청하지 않고 '미실행'으로 기록합니다.
+// 그 점검들의 배포 실측 결과는 학생이 자기 컴퓨터에서 실행한 기록으로 README에 있습니다.
+const WRITE_UNRUN = '미실행 (쓰기 요청이 필요해 격리된 제출 환경에서는 보내지 않음. 학생이 배포에서 직접 실행한 결과는 README 참고)';
+const unrunWrite = (attackId, expected) => ({ attackId, expected, observed: WRITE_UNRUN });
+
 export async function runAttackChecks(config) {
   if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(config.step)) throw new Error('이 단계의 공격 점검을 src/attack-check.mjs에 구현해 주세요.');
   let app;
@@ -133,16 +139,17 @@ async function runStep3Checks(doFetch, app, marker) {
   };
   const cases = [
     ['anonymous_notes_list_refused', '로그인 없는 GET /api/notes가 거부됨', () => send('GET', '/api/notes')],
-    ['anonymous_note_create_refused', '로그인 없는 POST /api/notes가 거부됨(빈 본문으로 보냄)', () => send('POST', '/api/notes', { body: {} })],
+    ['anonymous_note_create_refused', '로그인 없는 POST /api/notes가 거부됨(빈 본문으로 보냄)', null],
     ['anonymous_note_read_refused', '로그인 없는 GET /api/notes/:id가 거부됨(없는 id)', () => send('GET', `/api/notes/${absentId}`)],
-    ['anonymous_note_update_refused', '로그인 없는 PUT /api/notes/:id가 거부됨(없는 id)', () => send('PUT', `/api/notes/${absentId}`, { body: {} })],
-    ['anonymous_note_delete_refused', '로그인 없는 DELETE /api/notes/:id가 거부됨(없는 id)', () => send('DELETE', `/api/notes/${absentId}`)],
+    ['anonymous_note_update_refused', '로그인 없는 PUT /api/notes/:id가 거부됨(없는 id)', null],
+    ['anonymous_note_delete_refused', '로그인 없는 DELETE /api/notes/:id가 거부됨(없는 id)', null],
     ['forged_token_refused', '서명이 가짜인 로그인 토큰이 거부됨', () => send('GET', '/api/notes', { token: fakeJwt(claims) })],
     ['expired_token_refused', '만료된 로그인 토큰이 거부됨', () => send('GET', '/api/notes', { token: fakeJwt({ ...claims, exp: now - 600 }) })],
     ['other_issuer_token_refused', '다른 발급자의 로그인 토큰이 거부됨',
       () => send('GET', '/api/notes', { token: fakeJwt({ ...claims, iss: 'https://other.supabase.co/auth/v1' }) })],
   ];
   for (const [attackId, expected, run] of cases) {
+    if (!run) { results.push(unrunWrite(attackId, expected)); continue; }
     let response;
     try {
       response = await run();
@@ -207,30 +214,11 @@ async function runStep4Checks(doFetch, app, config) {
   }
   if (config.step >= 5) {
     // 가짜 계정으로 서버 로그인을 한 번 보내 거부되는지만 봅니다(실제 비밀번호 없음, 자료가 생기거나 바뀌지 않음).
-    const loginId = 'wrong_password_login_refused';
-    const loginExpected = '존재하지 않는 계정으로 POST /api/login을 보내면 거부됨';
-    try {
-      const response = await doFetch(new URL('/api/login', app), { method: 'POST', redirect: 'error',
-        signal: AbortSignal.timeout(10000), headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'no-such-user@example.invalid', password: 'wrong-password-for-check' }) });
-      let code = null;
-      let appJson = false;
-      try {
-        const data = JSON.parse(await response.text());
-        appJson = data !== null && typeof data === 'object';
-        if (typeof data?.error === 'string') code = data.error;
-      } catch { /* JSON이 아니면 앱의 응답으로 보지 않습니다. */ }
-      results.push({ attackId: loginId, expected: loginExpected,
-        observed: response.status === 401 && code === 'LOGIN_FAILED' ? '거부됨 (HTTP 401)'
-          : response.ok || appJson ? `거부되지 않음 또는 예상 밖 응답 (HTTP ${response.status})`
-            : `확인하지 못함 (HTTP ${response.status}, 앱의 응답으로 보이지 않음)` });
-    } catch {
-      results.push({ attackId: loginId, expected: loginExpected, observed: '확인하지 못함 (요청을 보내지 못함)' });
-    }
+    results.push(unrunWrite('wrong_password_login_refused', '존재하지 않는 계정으로 POST /api/login을 보내면 거부됨'));
   }
   if (config.step >= 8) results.push(...await runStep8Checks(doFetch, app));
-  if (config.step >= 10) results.push(...await runStep10Checks(doFetch, app));
-  if (config.step >= 11) results.push(...await runStep11Checks(doFetch, app));
+  if (config.step >= 10) results.push(...await runStep10Checks());
+  if (config.step >= 11) results.push(...await runStep11Checks());
   results.push(...await runCrossOwnerChecks(doFetch, app, config.step));
   return results;
 }
@@ -239,23 +227,21 @@ async function runStep4Checks(doFetch, app, config) {
 // ATTACK_TOKEN_OWNER(메모 주인 B의 로그인 토큰)와 ATTACK_TOKEN_OTHER(다른 계정 A의 로그인 토큰)를 넣었을 때만 보냅니다.
 // 토큰 값은 코드·Git·결과에 쓰지 않고 요청 머리글에만 쓰며, 결과에는 상태 번호와 짧은 오류 코드만 적습니다.
 // 환경변수가 없거나 모양이 틀리면 이전과 같은 문구로 미실행입니다. 심판의 판정이 아닙니다.
+// 읽기(GET) 한 건만 보냅니다. 남의 메모 수정·삭제·복구는 쓰기 요청이라 runCrossOwnerChecks가 미실행으로 적습니다.
 async function runCrossOwnerChecks(doFetch, app, step) {
+  const read = await runCrossOwnerReadCheck(doFetch, app);
+  return [...read,
+    unrunWrite('other_owner_update_refused', '로그인한 B가 A의 메모에 한 남의 메모 수정(PUT /api/notes/:id)이 거부됨'),
+    unrunWrite('other_owner_delete_refused', '로그인한 B가 A의 메모에 한 남의 메모 삭제(DELETE /api/notes/:id)이 거부됨'),
+    ...(step >= 10 ? [unrunWrite('other_owner_restore_refused', '로그인한 A가 B의 사본으로 POST /api/restore를 보내면 거부됨(403)')] : [])];
+}
+
+async function runCrossOwnerReadCheck(doFetch, app) {
   const unrun = '미실행 (A·B 두 계정의 로그인이 필요해 이 파일은 보내지 않음. 화면 확인 결과는 README 참고)';
-  const unrunRestore = '미실행 (A·B 두 계정의 로그인과 B의 비공개 사본이 필요해 이 파일은 보내지 않음. 화면 확인 결과는 README 참고)';
-  const json = { title: 'x', body: 'y' };
   const defs = [
     { attackId: 'other_owner_read_refused', unrun, expected: '로그인한 B가 A의 메모에 한 남의 메모 읽기(GET /api/notes/:id)이 거부됨',
       send: (call, id) => call('GET', `/api/notes/${id}`) },
-    { attackId: 'other_owner_update_refused', unrun, expected: '로그인한 B가 A의 메모에 한 남의 메모 수정(PUT /api/notes/:id)이 거부됨',
-      send: (call, id) => call('PUT', `/api/notes/${id}`, json) },
-    { attackId: 'other_owner_delete_refused', unrun, expected: '로그인한 B가 A의 메모에 한 남의 메모 삭제(DELETE /api/notes/:id)이 거부됨',
-      send: (call, id) => call('DELETE', `/api/notes/${id}`) },
   ];
-  if (step >= 10) {
-    defs.push({ attackId: 'other_owner_restore_refused', unrun: unrunRestore,
-      expected: '로그인한 A가 B의 사본으로 POST /api/restore를 보내면 거부됨(403)',
-      send: (call, id) => call('POST', '/api/restore', { id }) });
-  }
   const all = (observed) => defs.map(({ attackId, expected }) => ({ attackId, expected, observed }));
   const owner = process.env.ATTACK_TOKEN_OWNER;
   const other = process.env.ATTACK_TOKEN_OTHER;
@@ -311,54 +297,15 @@ async function runCrossOwnerChecks(doFetch, app, step) {
 
 // 10단계: 복구 경로 POST /api/restore를 로그인 없이 보냅니다(없는 id). 거부되어야 하며 자료·사본·감사 기록이 생기거나 바뀌지 않습니다.
 // 상태 번호와 오류 코드만 기록합니다. 로그인한 사용자의 복구는 보내지 않고, 다른 계정의 복구 요청은 위 runCrossOwnerChecks가 맡습니다. 심판의 판정이 아닙니다.
-async function runStep10Checks(doFetch, app) {
-  const attackId = 'anonymous_restore_refused';
-  const expected = '로그인 없는 POST /api/restore가 거부됨(없는 id로 보냄)';
-  try {
-    const response = await doFetch(new URL('/api/restore', app), { method: 'POST', redirect: 'error',
-      signal: AbortSignal.timeout(10000), headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: '00000000-0000-4000-8000-000000000000' }) });
-    let code = null;
-    let appJson = false;
-    try {
-      const data = JSON.parse(await response.text());
-      appJson = data !== null && typeof data === 'object';
-      if (typeof data?.error === 'string') code = data.error;
-    } catch { /* JSON이 아니면 앱의 응답으로 보지 않습니다. */ }
-    return [{ attackId, expected,
-      observed: response.status === 401 && code === 'LOGIN_REQUIRED' ? '거부됨 (HTTP 401)'
-        : response.ok || appJson ? `거부되지 않음 또는 예상 밖 응답 (HTTP ${response.status})`
-          : `확인하지 못함 (HTTP ${response.status}, 앱의 응답으로 보이지 않음)` }];
-  } catch {
-    return [{ attackId, expected, observed: '확인하지 못함 (요청을 보내지 못함)' }];
-  }
+async function runStep10Checks() {
+  return [unrunWrite('anonymous_restore_refused', '로그인 없는 POST /api/restore가 거부됨(없는 id로 보냄)')];
 }
 
 // 11단계: 로그인 없이 기기 승인 요청 경로에 보냅니다. 본문에 status: approved를 실어도 로그인이 없으면 401로 거부되어
 // 기기 행이 만들어지지 않아야 합니다(공개키는 모양만 맞춘 가짜 값이라 개인키가 아닙니다). 상태 번호만 기록하고, 심판의 판정이 아닙니다.
 // 기기 서명 없는 로그인 요청과 승인 전 기기의 거부는 로그인 토큰이 필요해 이 자동 점검에 넣지 않았고, 시험(test/device-gate.test.mjs)과 학생의 화면 확인으로 남깁니다.
-async function runStep11Checks(doFetch, app) {
-  const attackId = 'anonymous_device_approval_refused';
-  const expected = '로그인 없는 POST /api/device가 거부됨(본문에 status: approved를 실어도 승인되지 않음)';
-  try {
-    const fake = 'A'.repeat(43);
-    const response = await doFetch(new URL('/api/device', app), { method: 'POST', redirect: 'error',
-      signal: AbortSignal.timeout(10000), headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ publicKey: { kty: 'EC', crv: 'P-256', x: fake, y: fake }, status: 'approved' }) });
-    let code = null;
-    let appJson = false;
-    try {
-      const data = JSON.parse(await response.text());
-      appJson = data !== null && typeof data === 'object';
-      if (typeof data?.error === 'string') code = data.error;
-    } catch { /* JSON이 아니면 앱의 응답으로 보지 않습니다. */ }
-    return [{ attackId, expected,
-      observed: response.status === 401 && code === 'LOGIN_REQUIRED' ? '거부됨 (HTTP 401)'
-        : response.ok || appJson ? `거부되지 않음 또는 예상 밖 응답 (HTTP ${response.status})`
-          : `확인하지 못함 (HTTP ${response.status}, 앱의 응답으로 보이지 않음)` }];
-  } catch {
-    return [{ attackId, expected, observed: '확인하지 못함 (요청을 보내지 못함)' }];
-  }
+async function runStep11Checks() {
+  return [unrunWrite('anonymous_device_approval_refused', '로그인 없는 POST /api/device가 거부됨(본문에 status: approved를 실어도 승인되지 않음)')];
 }
 
 // 8단계: 화면 메뉴를 거치지 않고 주소로 직접 보내는 요청입니다. 로그인 없이 보내므로 자료가 생기거나 바뀌지 않습니다.

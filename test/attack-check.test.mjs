@@ -90,3 +90,27 @@ test('변형 요청 6개(없는 id 읽기, 가짜·만료·다른 발급자 토�
     assert.match(observed(results, 'other_owner_read_refused'), /^not_run$/u);
   } finally { globalThis.fetch = real; }
 });
+
+test('평소 bundle(학생이 켜지 않은 확인)은 어떤 요청도 보내지 않고 20개 모두 not_run으로 적는다', async () => {
+  const key = Symbol.for('aleph.attack.live');
+  const real = globalThis.fetch;
+  const savedLive = globalThis[key];
+  const savedEnv = process.env.ATTACK_LIVE;
+  const sent = [];
+  globalThis[key] = false;
+  delete process.env.ATTACK_LIVE;
+  globalThis.fetch = async (url) => { sent.push(String(url)); return json({ ok: true }); };
+  try {
+    const results = await runAttackChecks(config);
+    assert.equal(results.length, 20);
+    for (const r of results) assert.equal(r.observed, 'not_run', r.attackId);
+    assert.deepEqual(sent, [], '요청을 하나도 보내지 않음');
+    process.env.ATTACK_LIVE = '1';
+    const live = await runAttackChecks(config);
+    assert.ok(sent.length > 0, 'ATTACK_LIVE=1이면 실제 요청을 보냄');
+    assert.ok(live.some((r) => r.observed !== 'not_run'));
+  } finally {
+    globalThis.fetch = real; globalThis[key] = savedLive;
+    if (savedEnv === undefined) delete process.env.ATTACK_LIVE; else process.env.ATTACK_LIVE = savedEnv;
+  }
+});

@@ -45,6 +45,8 @@ try {
     }
     process.env.ATTACK_TOKEN_OWNER = result.tokens.OWNER;
     process.env.ATTACK_TOKEN_OTHER = result.tokens.OTHER;
+    // 학생이 직접 켠 확인이므로 점검 코드가 실제 요청을 보내도록 표시합니다(평소 bundle은 요청을 보내지 않고 not_run으로 기록).
+    globalThis[Symbol.for('aleph.attack.live')] = true;
     await import('./bundle.mjs');
     delete process.env.ATTACK_TOKEN_OWNER;
     delete process.env.ATTACK_TOKEN_OTHER;

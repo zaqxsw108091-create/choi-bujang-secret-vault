@@ -29,7 +29,12 @@ export async function runAttackChecks(config) {
   // 심판의 격리된 제출 환경은 실제 서버가 아니라 가짜 응답을 줄 수 있습니다. 그 응답으로 '거부됨' 같은 결과를 적으면 심판이 기록한
   // 실제 요청과 어긋나므로, 배포된 서버(Vercel)가 모든 응답에 붙이는 x-vercel-id 머리글이 없는 응답은 실제 요청의 결과로 보지 않고
   // '요청을 보내지 못함'과 똑같이 다룹니다(아래 모든 점검이 던진 오류를 not_run으로 적습니다).
+  // 실제 요청은 학생이 직접 켠 확인(scripts/attack-live.mjs 또는 환경변수 ATTACK_LIVE=1)에서만 보냅니다. 평소 `npm run bundle`은
+  // (심판의 격리된 환경 포함) 어떤 요청도 보내지 않고 모든 점검을 not_run으로 기록합니다. 그 환경이 진짜 서버로 가는지 이 코드가
+  // 확인할 수 없고, 심판은 자기 기록에 요청이 없는 점검의 결과를 인정하지 않기 때문입니다(심판 판정 53/100, 세 점검 지적).
+  const live = process.env.ATTACK_LIVE === '1' || globalThis[Symbol.for('aleph.attack.live')] === true;
   const serverFetch = async (url, init) => {
+    if (!live) throw new Error('requests_disabled');
     const response = await fetch(url, init);
     if (new URL(String(url)).host === app.host && !response.headers?.get?.('x-vercel-id')) throw new Error('unverified_response');
     return response;

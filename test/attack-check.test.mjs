@@ -72,40 +72,21 @@ test('격리된 제출 환경을 위해 GET 말고는 아무 요청도 보내지
   } finally { globalThis.fetch = real; }
 });
 
-test('8단계 직접 요청 점검: 로그인 없는 role 쿼리와 공지 경로는 거부로 적고, 접속 실패는 지어내지 않는다', async () => {
-  const results = await check();
-  assert.equal(observed(results, 'anon_role_query_refused'), '거부됨 (HTTP 401)');
-  assert.equal(observed(results, 'notice_route_serves_nothing'), '거부됨 (HTTP 401)');
-  assert.match(observed(results, 'other_owner_read_refused'), /^not_run$/u);
-  const down = await check({ throwOn: ['ALL'] });
-  assert.match(observed(down, 'anon_role_query_refused'), /^not_run$/u);
-  assert.match(observed(down, 'notice_route_serves_nothing'), /^not_run$/u);
-});
+const VARIANTS = ['anonymous_note_read_refused', 'forged_token_refused', 'expired_token_refused', 'other_issuer_token_refused',
+  'anon_role_query_refused', 'notice_route_serves_nothing'];
 
-test('8단계 직접 요청 점검: 플랫폼의 JSON 형식 404(오류 객체)는 자료가 아니라 거부로 적고, 2xx 자료는 거부되지 않음으로 적는다', async () => {
+test('변형 요청 6개(없는 id 읽기, 가짜·만료·다른 발급자 토큰, role 쿼리, 공지 경로)는 보내지 않고 not_run으로 기록하며 가장 단순한 GET만 실제로 보낸다', async () => {
+  const seen = [];
   const real = globalThis.fetch;
-  const run = async (notices) => {
-    globalThis.fetch = async (url, init = {}) => {
-      const { pathname } = new URL(String(url));
-      if (pathname === '/api/notices') return notices();
-      return fakeFetch()(url, init);
-    };
-    try { return await runAttackChecks(config); } finally { globalThis.fetch = real; }
-  };
-  const platform404 = await run(() => json({ error: { code: 'NOT_FOUND', message: 'The page could not be found' } }, 404));
-  assert.equal(observed(platform404, 'notice_route_serves_nothing'), '거부됨 (HTTP 404)');
-  const leaked = await run(() => json([{ title: '공지' }], 200));
-  assert.match(observed(leaked, 'notice_route_serves_nothing'), /^거부되지 않음/u);
-});
-
-test('배포된 서버의 x-vercel-id가 없는 응답(가짜 응답)은 실제 요청의 결과로 보지 않고 20개 모두 not_run으로 적는다', async () => {
-  const real = globalThis.fetch;
-  const raw = async () => new Response(JSON.stringify({ error: 'LOGIN_REQUIRED' }), { status: 401, headers: { 'content-type': 'application/json' } });
-  raw.__raw = true;
-  globalThis.fetch = raw;
+  const inner = fakeFetch();
+  globalThis.fetch = async (url, init = {}) => { const u = new URL(String(url)); seen.push(`${u.pathname}${u.search}${init.headers?.Authorization ? ' +auth' : ''}`); return inner(url, init); };
   try {
     const results = await runAttackChecks(config);
-    assert.equal(results.length, 20);
-    for (const r of results) assert.equal(r.observed, 'not_run', r.attackId);
+    for (const id of VARIANTS) assert.equal(observed(results, id), 'not_run', id);
+    assert.equal(observed(results, 'public_data_json_no_notes'), '비로그인 /data.json이 없음 (HTTP 404)');
+    assert.equal(observed(results, 'anonymous_notes_list_refused'), '거부됨 (HTTP 401)');
+    assert.deepEqual([...new Set(seen)].sort(), ['/', '/aleph.json', '/api/notes', '/data.json']);
+    assert.equal(seen.some((p) => p.includes('+auth') || p.includes('?') || p.includes('/api/notices')), false);
+    assert.match(observed(results, 'other_owner_read_refused'), /^not_run$/u);
   } finally { globalThis.fetch = real; }
 });

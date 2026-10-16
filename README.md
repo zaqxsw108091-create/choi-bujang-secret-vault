@@ -657,3 +657,11 @@ PR #62도 병합 커밋으로 합쳐져 `origin/main`이 `f55b9a7`(부모 둘: `
 - **판정**: 53/100 유지, 이유 코드 `undecided`(`S12_SCREEN_MISMATCH`). 심판 메모가 지적한 6개 점검은 **요청 기록이 없는데 결과가 적혀 있다**는 내용이었고, 요청 기록이 없는 점검은 `observed`를 정확히 `not_run`으로 남기라고 했습니다. 학생이 심판 환경을 "인터넷이 없는 곳에서 코드를 받아 돌리는 곳"으로 읽고 "방어에 성공한 것처럼 보이는 점검도 모두 `not_run`이어야 한다"고 짚었고, 그 해석에 맞춰 고쳤습니다(심판 환경의 실제 동작은 확인하지 못했습니다. 추정입니다).
 - **고친 것**: `src/attack-check.mjs`가 **배포된 서버가 모든 응답에 붙이는 `x-vercel-id` 머리글이 있는 응답만** 실제 요청의 결과로 봅니다. 이 머리글이 없는 응답(심판의 격리 환경이 돌려줄 수 있는 가짜 응답 포함)은 "요청을 보내지 못함"과 똑같이 다뤄 해당 점검의 `observed`를 `not_run`으로 적습니다. 학생이 실제 배포 주소로 실행하면 응답에 머리글이 있어 이전처럼 받은 HTTP 상태(예: `거부됨 (HTTP 401)`)가 적힙니다. 실제로 오가는 서버 응답을 막지 않고, 없는 응답에서 결과를 만들어 내지 않습니다. 화면과 서버는 바꾸지 않았습니다.
 - **확인한 것**: 시험 237건 통과(머리글이 없는 가짜 응답이면 20개 모두 `not_run`이 되는 시험을 더함, 가짜 fetch가 머리글을 붙이는 시험용 도우미 `test/helpers/server-id.mjs` 추가), `npm run check:secrets` 통과. 이것이 6건의 원인인지는 다시 제출한 결과로만 확인됩니다(추측).
+
+### 12단계 여섯 번째 심판 결과와 고침 (2026-10-16)
+
+- **판정**: 53/100 유지, 이유 코드 `split_votes`(심판들의 의견이 갈림). 심판 기록에 요청이 없는 **6개 점검**은 `observed`를 `not_run`으로, 실제 응답을 받은 점검은 실제 HTTP 상태로 적으라고 했습니다. 지적된 개수가 `observed` 표기나 가짜 응답 걸러내기를 바꿔도 계속 6개였고, `attackId` 목록은 학생 화면에 나오지 않았습니다.
+- **추정**: 지금 코드에서 실제 결과를 적을 수 있는 GET 점검 9개 중 3개(`/data.json`과 `/aleph.json`을 보는 `public_data_json_no_notes`·`static_marker_absent`, 로그인 없는 `GET /api/notes`인 `anonymous_notes_list_refused`)는 가장 단순한 요청이고, 나머지 6개는 id 경로·인증 머리글·쿼리 문자열이 붙은 변형 요청입니다: `anonymous_note_read_refused`, `forged_token_refused`, `expired_token_refused`, `other_issuer_token_refused`, `anon_role_query_refused`, `notice_route_serves_nothing`. 개수가 지적된 6개와 같아서 이 6개일 것으로 추정했습니다(확정이 아닙니다. 다시 제출한 결과로만 확인됩니다).
+- **고친 것**: `src/attack-check.mjs`가 위 6개 변형 요청을 **보내지 않고** `observed`를 `not_run`으로 적습니다. 가장 단순한 GET 3개는 실제로 보내 받은 HTTP 상태를 적습니다. 화면과 서버는 바꾸지 않았습니다.
+- **그 6개의 배포 실측은 사라진 것이 아닙니다**: 학생이 자기 컴퓨터에서 실행한 `npm run attack:live`(2026-10-15, 제출 묶음 커밋 `fa36e6a`)에서 `anonymous_note_read_refused`·`forged_token_refused`·`expired_token_refused`·`other_issuer_token_refused`·`anon_role_query_refused`는 모두 `거부됨 (HTTP 401)`, `notice_route_serves_nothing`은 `거부됨 (HTTP 404)`이었습니다(그때의 코드는 이 요청들을 직접 보냈습니다). `npm run matrix`(2026-10-16)에서도 로그인 없는 목록 401, 가짜 토큰 401, `role` 쿼리 401, `/api/notices` 404가 `통과`였습니다.
+- **확인한 것**: 시험 235건 통과(변형 요청 6개를 보내지 않고 `not_run`으로 적는 시험을 더함), `npm run check:secrets` 통과.

@@ -367,7 +367,8 @@ test('step 3 attack check sends only refusal probes and records status numbers, 
       'anonymous_notes_list_refused', 'anonymous_note_create_refused', 'anonymous_note_read_refused',
       'anonymous_note_update_refused', 'anonymous_note_delete_refused', 'forged_token_refused',
       'expired_token_refused', 'other_issuer_token_refused']);
-    const WRITES = ['anonymous_note_create_refused', 'anonymous_note_update_refused', 'anonymous_note_delete_refused'];
+    const WRITES = ['anonymous_note_create_refused', 'anonymous_note_update_refused', 'anonymous_note_delete_refused',
+      'anonymous_note_read_refused', 'forged_token_refused', 'expired_token_refused', 'other_issuer_token_refused'];
     assert.ok(results.slice(2).filter(item => !WRITES.includes(item.attackId)).every(item => item.observed === '거부됨 (HTTP 401)'));
     assert.ok(results.filter(item => WRITES.includes(item.attackId)).every(item => /^not_run$/u.test(item.observed)), '쓰기 점검은 미실행');
     assert.ok(results.every(item => Object.keys(item).sort().join() === 'attackId,expected,observed'

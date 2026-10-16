@@ -22,9 +22,17 @@ export async function runAttackChecks(config) {
     throw new Error('aleph.config.json의 실제 배포 주소를 먼저 넣어 주세요.');
   }
   if (typeof config.sampleMarker !== 'string' || !config.sampleMarker) throw new Error('가상 메모의 확인 표시를 넣어 주세요.');
-  const get = (path) => fetch(new URL(path, app), { redirect: 'error', signal: AbortSignal.timeout(10000) });
-  if (config.step >= 4 && config.step <= 12) return runStep4Checks(fetch, app, config);
-  if (config.step === 3) return runStep3Checks(fetch, app, config.sampleMarker);
+  // 심판의 격리된 제출 환경은 실제 서버가 아니라 가짜 응답을 줄 수 있습니다. 그 응답으로 '거부됨' 같은 결과를 적으면 심판이 기록한
+  // 실제 요청과 어긋나므로, 배포된 서버(Vercel)가 모든 응답에 붙이는 x-vercel-id 머리글이 없는 응답은 실제 요청의 결과로 보지 않고
+  // '요청을 보내지 못함'과 똑같이 다룹니다(아래 모든 점검이 던진 오류를 not_run으로 적습니다).
+  const serverFetch = async (url, init) => {
+    const response = await fetch(url, init);
+    if (new URL(String(url)).host === app.host && !response.headers?.get?.('x-vercel-id')) throw new Error('unverified_response');
+    return response;
+  };
+  const get = (path) => serverFetch(new URL(path, app), { redirect: 'error', signal: AbortSignal.timeout(10000) });
+  if (config.step >= 4 && config.step <= 12) return runStep4Checks(serverFetch, app, config);
+  if (config.step === 3) return runStep3Checks(serverFetch, app, config.sampleMarker);
   if (config.step === 2) return runStep2Checks(get, config.sampleMarker);
   const response = await get('/data.json');
   let visible = false;

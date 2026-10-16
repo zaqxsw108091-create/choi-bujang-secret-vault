@@ -1,3 +1,4 @@
+import './helpers/server-id.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
@@ -95,4 +96,16 @@ test('8단계 직접 요청 점검: 플랫폼의 JSON 형식 404(오류 객체)�
   assert.equal(observed(platform404, 'notice_route_serves_nothing'), '거부됨 (HTTP 404)');
   const leaked = await run(() => json([{ title: '공지' }], 200));
   assert.match(observed(leaked, 'notice_route_serves_nothing'), /^거부되지 않음/u);
+});
+
+test('배포된 서버의 x-vercel-id가 없는 응답(가짜 응답)은 실제 요청의 결과로 보지 않고 20개 모두 not_run으로 적는다', async () => {
+  const real = globalThis.fetch;
+  const raw = async () => new Response(JSON.stringify({ error: 'LOGIN_REQUIRED' }), { status: 401, headers: { 'content-type': 'application/json' } });
+  raw.__raw = true;
+  globalThis.fetch = raw;
+  try {
+    const results = await runAttackChecks(config);
+    assert.equal(results.length, 20);
+    for (const r of results) assert.equal(r.observed, 'not_run', r.attackId);
+  } finally { globalThis.fetch = real; }
 });

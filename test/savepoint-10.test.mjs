@@ -1,3 +1,4 @@
+import './helpers/server-id.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

@@ -631,3 +631,7 @@
 ### 12단계 재제출 전 확인: 병합 커밋 방지 (2026-10-16)
 
 PR #61도 기본값(병합 커밋 만들기)으로 합쳐져 `origin/main`이 `723c4c1`(부모 둘: `1c7693e`, `f807e81`)이 되었고, 같은 이유로 `bundle`이 막히는 상태였습니다. 학생이 `git log -1 --format="%h %p" origin/main`으로 부모가 둘임을 직접 확인했습니다. 고침: 병합 커밋 여부를 미리 알려 주는 읽기 전용 명령 `npm run check:commit`(`scripts/check-last-commit.mjs`)을 더하고, 이 변경을 **Squash and merge**로 합쳐 `main`의 마지막 커밋이 일반 커밋이 되게 합니다. 사용법: `git fetch origin && git checkout main && git pull` 뒤 `npm run check:commit`을 실행해 `통과: 일반 커밋이고 바뀐 파일이 있습니다.`가 나오는지 봅니다(병합 커밋이면 `확인 실패`).
+
+### 12단계 재제출 전 두 번째 확인 (2026-10-16)
+
+PR #62도 병합 커밋으로 합쳐져 `origin/main`이 `f55b9a7`(부모 둘: `723c4c1`, `b9b1b77`)이 되었습니다. 합치기 화면에서는 이 저장소가 병합 커밋만 만드는 것으로 보여, 화면 대신 명령으로 고쳤습니다. 작업 브랜치를 `main` 끝(`f55b9a7`)에서 이어 일반 커밋 하나를 더 올린 뒤, `main`을 그 커밋으로 **빨리감기(fast-forward)** 해서 병합 커밋 없이 `main`의 마지막 커밋이 일반 커밋이 되게 했습니다(`git merge --ff-only`). 학생이 `npm run check:commit`으로 `통과`를 확인합니다. 이 기록은 그 일반 커밋의 변경입니다.

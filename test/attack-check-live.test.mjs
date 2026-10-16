@@ -48,12 +48,12 @@ const observed = (results, id) => results.find(r => r.attackId === id)?.observed
 const CROSS = ['other_owner_read_refused', 'other_owner_update_refused', 'other_owner_delete_refused', 'other_owner_restore_refused'];
 const READ = 'other_owner_read_refused';
 const WRITES = ['other_owner_update_refused', 'other_owner_delete_refused', 'other_owner_restore_refused'];
-const isUnrun = (results, ids) => ids.every(id => /^미실행/u.test(observed(results, id) ?? ''));
+const isUnrun = (results, ids) => ids.every(id => /^not_run$/u.test(observed(results, id) ?? ''));
 const BOTH = { ATTACK_TOKEN_OWNER: OWNER, ATTACK_TOKEN_OTHER: OTHER, ATTACK_ANON_KEY: ANON };
 
 test('환경변수가 없으면 5개 모두 이전과 같은 미실행이고, 로그인 값은 보내지 않는다', async () => {
   const { results, sent } = await run();
-  for (const id of [...CROSS, 'anon_data_api_notes_refused']) assert.match(observed(results, id), /^미실행/u, id);
+  for (const id of [...CROSS, 'anon_data_api_notes_refused']) assert.match(observed(results, id), /^not_run$/u, id);
   assert.equal(results.length, 19);
   assert.ok(sent.every(s => s.auth !== `Bearer ${OWNER}` && s.auth !== `Bearer ${OTHER}` && s.apikey === null));
   assert.ok(!sent.some(s => s.path.includes(NOTE)));
@@ -107,17 +107,17 @@ test('B에게 메모가 없으면 보내지 않고 확인하지 못함으로 적
 test('모양이 틀린 토큰·키, 하나만 있는 경우는 미실행으로 남는다', async () => {
   for (const env of [{ ATTACK_TOKEN_OWNER: OWNER }, { ATTACK_TOKEN_OTHER: OTHER }, { ATTACK_TOKEN_OWNER: 'abc', ATTACK_TOKEN_OTHER: OTHER }]) {
     const { results, sent } = await run({ env });
-    for (const id of CROSS) assert.match(observed(results, id), /^미실행/u);
+    for (const id of CROSS) assert.match(observed(results, id), /^not_run$/u);
     assert.ok(!sent.some(s => s.path.includes(NOTE)));
   }
   const bad = await run({ env: { ATTACK_ANON_KEY: 'not a key' } });
-  assert.match(observed(bad.results, 'anon_data_api_notes_refused'), /^미실행/u);
+  assert.match(observed(bad.results, 'anon_data_api_notes_refused'), /^not_run$/u);
 });
 
 test('9단계 설정에서는 복구 점검이 없다', async () => {
   const { results } = await run({ env: BOTH, step: 9 });
   assert.equal(observed(results, 'other_owner_restore_refused'), undefined);
-  assert.match(observed(results, 'other_owner_update_refused'), /^미실행/u);
+  assert.match(observed(results, 'other_owner_update_refused'), /^not_run$/u);
 });
 
 test('점검 코드와 이 시험 파일에 키·토큰 모양의 실제 값이 없다(프로젝트 비밀값 검사기 기준)', () => {

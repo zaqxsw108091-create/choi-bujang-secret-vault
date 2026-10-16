@@ -143,7 +143,7 @@ test('attack:live 준비: 두 계정의 기기를 승인받아 실제 서버 코
     const results = await runAttackChecks({ ...config, step: 12, publicAppUrl: APP.href });
     assert.equal(results.find(r => r.attackId === 'other_owner_read_refused')?.observed, '거부됨 (HTTP 403)');
     for (const id of ['other_owner_update_refused', 'other_owner_delete_refused', 'other_owner_restore_refused']) {
-      assert.match(results.find(r => r.attackId === id)?.observed ?? '', /^미실행/u, id);
+      assert.match(results.find(r => r.attackId === id)?.observed ?? '', /^not_run$/u, id);
     }
     assert.equal(db.notes[0].title, 'B 가상', 'B의 메모는 바뀌지 않음');
   } finally {

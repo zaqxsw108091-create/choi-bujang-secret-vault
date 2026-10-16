@@ -63,7 +63,7 @@ async function staticChecks(get, marker) {
     }
   }
   results.push(data === null
-    ? { attackId: 'public_data_json_no_notes', expected: dataExpected, observed: '확인하지 못함 (요청을 보내지 못함)' }
+    ? { attackId: 'public_data_json_no_notes', expected: dataExpected, observed: '미실행 (요청을 보내지 못함)' }
     : { attackId: 'public_data_json_no_notes', expected: dataExpected,
       observed: data.response.status === 404 ? '비로그인 /data.json이 없음 (HTTP 404)'
         : dataNotes === null ? `/data.json 형식을 확인하지 못함 (HTTP ${data.response.status})`
@@ -75,7 +75,7 @@ async function staticChecks(get, marker) {
   results.push({ attackId: 'static_marker_absent',
     expected: '비로그인 정적 응답(/data.json, /aleph.json)에 시작 틀 확인 표시가 없음',
     observed: markerPaths.length ? `확인 표시가 보임: ${markerPaths.join(', ')}`
-      : data === null || aleph === null ? '확인하지 못함 (요청을 보내지 못함)'
+      : data === null || aleph === null ? '미실행 (요청을 보내지 못함)'
         : `확인 표시가 보이지 않음 (/data.json HTTP ${data.response.status}, /aleph.json HTTP ${aleph.response.status})` });
   return results;
 }
@@ -155,7 +155,7 @@ async function runStep3Checks(doFetch, app, marker) {
       response = await run();
     } catch {
       // 접속하지 못하면 값을 지어내지 않고 "확인하지 못함"으로 적습니다.
-      results.push({ attackId, expected, observed: '확인하지 못함 (요청을 보내지 못함)' });
+      results.push({ attackId, expected, observed: '미실행 (요청을 보내지 못함)' });
       continue;
     }
     results.push(await refused(attackId, expected, response));
@@ -210,7 +210,7 @@ async function runStep4Checks(doFetch, app, config) {
       }
     }
   } catch {
-    results.push(unknown('요청을 보내지 못함'));
+    results.push({ attackId: id, expected, observed: '미실행 (요청을 보내지 못함)' });
   }
   if (config.step >= 5) {
     // 가짜 계정으로 서버 로그인을 한 번 보내 거부되는지만 봅니다(실제 비밀번호 없음, 자료가 생기거나 바뀌지 않음).
@@ -273,7 +273,7 @@ async function runCrossOwnerReadCheck(doFetch, app) {
     if (!Array.isArray(theirList)) return all(`확인하지 못함 (A 계정의 메모 목록을 읽지 못함: HTTP ${theirs.status})`);
     if (theirList.some(note => note?.id === target)) return all('확인하지 못함 (두 토큰이 같은 계정으로 보여 보내지 않음)');
   } catch {
-    return all('확인하지 못함 (요청을 보내지 못함)');
+    return all('미실행 (요청을 보내지 못함)');
   }
   const results = [];
   for (const { attackId, expected, send } of defs) {
@@ -289,7 +289,7 @@ async function runCrossOwnerReadCheck(doFetch, app) {
           : response.ok ? `거부되지 않음 (HTTP ${response.status})`
             : `확인하지 못함 또는 예상 밖 (HTTP ${response.status}${code ? `, ${code}` : ''})` });
     } catch {
-      results.push({ attackId, expected, observed: '확인하지 못함 (요청을 보내지 못함)' });
+      results.push({ attackId, expected, observed: '미실행 (요청을 보내지 못함)' });
     }
   }
   return results;
@@ -327,7 +327,7 @@ async function runStep8Checks(doFetch, app) {
       return { attackId, expected, observed: isRefused(response.status, code)
         ? `거부됨 (HTTP ${response.status})` : `확인하지 못함 또는 예상 밖 (HTTP ${response.status})` };
     } catch {
-      return { attackId, expected, observed: '확인하지 못함 (요청을 보내지 못함)' };
+      return { attackId, expected, observed: '미실행 (요청을 보내지 못함)' };
     }
   };
   return [

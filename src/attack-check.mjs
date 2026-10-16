@@ -3,7 +3,10 @@
 // 이 파일은 심판의 격리된 제출 환경에서도 `npm run bundle`로 실행됩니다. 그곳에서는 공개 HTTPS 주소로 보내는 GET만 되므로,
 // 쓰기(생성·수정·삭제·로그인·복구·기기 승인)가 필요한 점검은 요청하지 않고 '미실행'으로 기록합니다.
 // 그 점검들의 배포 실측 결과는 학생이 자기 컴퓨터에서 실행한 기록으로 README에 있습니다.
-const WRITE_UNRUN = '미실행 (쓰기 요청이 필요해 격리된 제출 환경에서는 보내지 않음. 학생이 배포에서 직접 실행한 결과는 README 참고)';
+// 심판의 제출 기록 규칙: 요청을 보내지 않은 점검의 observed는 정확히 `not_run`이고, 요청을 보낸 점검에는 받은 HTTP 상태를 적습니다.
+// 보내지 않은 이유는 observed에 덧붙이지 않고 이 주석과 README에 적습니다.
+const NOT_RUN = 'not_run';
+const WRITE_UNRUN = NOT_RUN;
 const unrunWrite = (attackId, expected) => ({ attackId, expected, observed: WRITE_UNRUN });
 
 export async function runAttackChecks(config) {
@@ -63,7 +66,7 @@ async function staticChecks(get, marker) {
     }
   }
   results.push(data === null
-    ? { attackId: 'public_data_json_no_notes', expected: dataExpected, observed: '미실행 (요청을 보내지 못함)' }
+    ? { attackId: 'public_data_json_no_notes', expected: dataExpected, observed: NOT_RUN }
     : { attackId: 'public_data_json_no_notes', expected: dataExpected,
       observed: data.response.status === 404 ? '비로그인 /data.json이 없음 (HTTP 404)'
         : dataNotes === null ? `/data.json 형식을 확인하지 못함 (HTTP ${data.response.status})`
@@ -75,7 +78,7 @@ async function staticChecks(get, marker) {
   results.push({ attackId: 'static_marker_absent',
     expected: '비로그인 정적 응답(/data.json, /aleph.json)에 시작 틀 확인 표시가 없음',
     observed: markerPaths.length ? `확인 표시가 보임: ${markerPaths.join(', ')}`
-      : data === null || aleph === null ? '미실행 (요청을 보내지 못함)'
+      : data === null || aleph === null ? NOT_RUN
         : `확인 표시가 보이지 않음 (/data.json HTTP ${data.response.status}, /aleph.json HTTP ${aleph.response.status})` });
   return results;
 }
@@ -155,7 +158,7 @@ async function runStep3Checks(doFetch, app, marker) {
       response = await run();
     } catch {
       // 접속하지 못하면 값을 지어내지 않고 "확인하지 못함"으로 적습니다.
-      results.push({ attackId, expected, observed: '미실행 (요청을 보내지 못함)' });
+      results.push({ attackId, expected, observed: NOT_RUN });
       continue;
     }
     results.push(await refused(attackId, expected, response));
@@ -191,7 +194,7 @@ async function runStep4Checks(doFetch, app, config) {
       ?? (typeof envKey === 'string' && ANON_KEY.test(envKey) ? envKey : undefined);
     if (!key && config.step >= 5) {
       // 5단계부터 화면에는 공개 키가 없습니다(키는 서버에만). 이 파일은 키를 갖지 않으므로 보내지 않습니다.
-      results.push({ attackId: id, expected, observed: '미실행 (화면에 공개 키가 없어 이 파일은 보내지 않음. 원본 직접 요청은 심판이 anon 키로 확인)' });
+      results.push({ attackId: id, expected, observed: NOT_RUN });
     } else if (!key) {
       results.push(unknown('화면에서 공개 키를 찾지 못함'));
     } else {
@@ -210,7 +213,7 @@ async function runStep4Checks(doFetch, app, config) {
       }
     }
   } catch {
-    results.push({ attackId: id, expected, observed: '미실행 (요청을 보내지 못함)' });
+    results.push({ attackId: id, expected, observed: NOT_RUN });
   }
   if (config.step >= 5) {
     // 가짜 계정으로 서버 로그인을 한 번 보내 거부되는지만 봅니다(실제 비밀번호 없음, 자료가 생기거나 바뀌지 않음).
@@ -237,7 +240,7 @@ async function runCrossOwnerChecks(doFetch, app, step) {
 }
 
 async function runCrossOwnerReadCheck(doFetch, app) {
-  const unrun = '미실행 (A·B 두 계정의 로그인이 필요해 이 파일은 보내지 않음. 화면 확인 결과는 README 참고)';
+  const unrun = NOT_RUN;
   const defs = [
     { attackId: 'other_owner_read_refused', unrun, expected: '로그인한 B가 A의 메모에 한 남의 메모 읽기(GET /api/notes/:id)이 거부됨',
       send: (call, id) => call('GET', `/api/notes/${id}`) },
@@ -273,7 +276,7 @@ async function runCrossOwnerReadCheck(doFetch, app) {
     if (!Array.isArray(theirList)) return all(`확인하지 못함 (A 계정의 메모 목록을 읽지 못함: HTTP ${theirs.status})`);
     if (theirList.some(note => note?.id === target)) return all('확인하지 못함 (두 토큰이 같은 계정으로 보여 보내지 않음)');
   } catch {
-    return all('미실행 (요청을 보내지 못함)');
+    return all(NOT_RUN);
   }
   const results = [];
   for (const { attackId, expected, send } of defs) {
@@ -289,7 +292,7 @@ async function runCrossOwnerReadCheck(doFetch, app) {
           : response.ok ? `거부되지 않음 (HTTP ${response.status})`
             : `확인하지 못함 또는 예상 밖 (HTTP ${response.status}${code ? `, ${code}` : ''})` });
     } catch {
-      results.push({ attackId, expected, observed: '미실행 (요청을 보내지 못함)' });
+      results.push({ attackId, expected, observed: NOT_RUN });
     }
   }
   return results;
@@ -327,7 +330,7 @@ async function runStep8Checks(doFetch, app) {
       return { attackId, expected, observed: isRefused(response.status, code)
         ? `거부됨 (HTTP ${response.status})` : `확인하지 못함 또는 예상 밖 (HTTP ${response.status})` };
     } catch {
-      return { attackId, expected, observed: '미실행 (요청을 보내지 못함)' };
+      return { attackId, expected, observed: NOT_RUN };
     }
   };
   return [

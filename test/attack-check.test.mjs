@@ -33,7 +33,7 @@ test('접속이 되면 실제 응답대로 적는다(거부됨·없음)', async 
   assert.equal(observed(results, 'public_data_json_no_notes'), '비로그인 /data.json이 없음 (HTTP 404)');
   assert.match(observed(results, 'static_marker_absent'), /^확인 표시가 보이지 않음 \(\/data\.json HTTP 404, \/aleph\.json HTTP 200\)$/u);
   assert.equal(observed(results, 'anonymous_notes_list_refused'), '거부됨 (HTTP 401)');
-  assert.match(observed(results, 'wrong_password_login_refused'), /^미실행/u);
+  assert.match(observed(results, 'wrong_password_login_refused'), /^not_run$/u);
   assert.match(observed(await check({ marker: true }), 'static_marker_absent'), /^확인 표시가 보임: \/aleph\.json$/u);
 });
 
@@ -41,7 +41,7 @@ test('배포 주소에 접속하지 못하면 오류로 멈추지 않고, 지어
   const results = await check({ throwOn: ['ALL'] });
   assert.ok(results.length >= 15);
   for (const r of results) {
-    assert.match(r.observed, /^(?:확인하지 못함|미실행)/u, `${r.attackId}: ${r.observed}`);
+    assert.match(r.observed, /^(?:확인하지 못함|not_run)/u, `${r.attackId}: ${r.observed}`);
     assert.doesNotMatch(r.observed, /거부됨|보이지 않음|없음 \(HTTP/u, r.attackId);
   }
 });
@@ -50,8 +50,8 @@ test('일부 요청만 접속하지 못하면 된 것은 사실대로, 안 된 �
   const results = await check({ throwOn: ['/aleph.json', '/api/login'] });
   assert.equal(observed(results, 'public_data_json_no_notes'), '비로그인 /data.json이 없음 (HTTP 404)');
   assert.equal(observed(results, 'anonymous_notes_list_refused'), '거부됨 (HTTP 401)');
-  assert.equal(observed(results, 'static_marker_absent'), '미실행 (요청을 보내지 못함)');
-  assert.match(observed(results, 'wrong_password_login_refused'), /^미실행/u);
+  assert.equal(observed(results, 'static_marker_absent'), 'not_run');
+  assert.match(observed(results, 'wrong_password_login_refused'), /^not_run$/u);
 });
 
 test('격리된 제출 환경을 위해 GET 말고는 아무 요청도 보내지 않고, 쓰기가 필요한 점검은 미실행으로 남긴다', async () => {
@@ -65,7 +65,7 @@ test('격리된 제출 환경을 위해 GET 말고는 아무 요청도 보내지
     for (const id of ['anonymous_note_create_refused', 'anonymous_note_update_refused', 'anonymous_note_delete_refused',
       'wrong_password_login_refused', 'anonymous_restore_refused', 'anonymous_device_approval_refused',
       'other_owner_update_refused', 'other_owner_delete_refused', 'other_owner_restore_refused']) {
-      assert.match(observed(results, id), /^미실행 \(쓰기 요청이 필요해/u, id);
+      assert.match(observed(results, id), /^not_run$/u, id);
     }
     assert.equal(results.length, 20);
   } finally { globalThis.fetch = real; }
@@ -75,10 +75,10 @@ test('8단계 직접 요청 점검: 로그인 없는 role 쿼리와 공지 경�
   const results = await check();
   assert.equal(observed(results, 'anon_role_query_refused'), '거부됨 (HTTP 401)');
   assert.equal(observed(results, 'notice_route_serves_nothing'), '거부됨 (HTTP 401)');
-  assert.match(observed(results, 'other_owner_read_refused'), /^미실행/u);
+  assert.match(observed(results, 'other_owner_read_refused'), /^not_run$/u);
   const down = await check({ throwOn: ['ALL'] });
-  assert.match(observed(down, 'anon_role_query_refused'), /^미실행 \(요청을 보내지 못함\)/u);
-  assert.match(observed(down, 'notice_route_serves_nothing'), /^미실행 \(요청을 보내지 못함\)/u);
+  assert.match(observed(down, 'anon_role_query_refused'), /^not_run$/u);
+  assert.match(observed(down, 'notice_route_serves_nothing'), /^not_run$/u);
 });
 
 test('8단계 직접 요청 점검: 플랫폼의 JSON 형식 404(오류 객체)는 자료가 아니라 거부로 적고, 2xx 자료는 거부되지 않음으로 적는다', async () => {

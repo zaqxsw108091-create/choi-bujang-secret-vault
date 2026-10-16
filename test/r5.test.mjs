@@ -368,7 +368,7 @@ test('step 3 attack check sends only refusal probes and records status numbers, 
       'expired_token_refused', 'other_issuer_token_refused']);
     const WRITES = ['anonymous_note_create_refused', 'anonymous_note_update_refused', 'anonymous_note_delete_refused'];
     assert.ok(results.slice(2).filter(item => !WRITES.includes(item.attackId)).every(item => item.observed === '거부됨 (HTTP 401)'));
-    assert.ok(results.filter(item => WRITES.includes(item.attackId)).every(item => /^미실행/u.test(item.observed)), '쓰기 점검은 미실행');
+    assert.ok(results.filter(item => WRITES.includes(item.attackId)).every(item => /^not_run$/u.test(item.observed)), '쓰기 점검은 미실행');
     assert.ok(results.every(item => Object.keys(item).sort().join() === 'attackId,expected,observed'
       && item.expected.length <= 300 && item.observed.length <= 300));
     assert.equal(JSON.stringify(results).includes('가상 본문'), false);
@@ -514,7 +514,7 @@ test('step 4 attack check adds a direct anon Data API probe and leaves cross-own
     assert.deepEqual([probe.method, probe.path, probe.apikey],
       ['GET', '/rest/v1/notes?select=id&limit=1', 'sb_publishable_TESTKEY123456']);
     for (const id of ['other_owner_read_refused', 'other_owner_update_refused', 'other_owner_delete_refused']) {
-      assert.match(denied.find(item => item.attackId === id).observed, /^미실행/u);
+      assert.match(denied.find(item => item.attackId === id).observed, /^not_run$/u);
     }
     const open = await run(() => new Response(JSON.stringify([{ id: 'x', title: '가상 제목' }]), { status: 200 }));
     assert.match(open.find(item => item.attackId === 'anon_data_api_notes_refused').observed, /^거부되지 않음 \(HTTP 200, 메모 1건 이상/u);
@@ -634,8 +634,8 @@ test('step 5 attack check: with no key in the page the direct probe is not run, 
   try {
     const out = await runAttackChecks({ ...config, ...realConfig });
     assert.ok(out.length <= 20);
-    assert.match(out.find(i => i.attackId === 'anon_data_api_notes_refused').observed, /^미실행/u);
-    assert.match(out.find(i => i.attackId === 'wrong_password_login_refused').observed, /^미실행/u);
+    assert.match(out.find(i => i.attackId === 'anon_data_api_notes_refused').observed, /^not_run$/u);
+    assert.match(out.find(i => i.attackId === 'wrong_password_login_refused').observed, /^not_run$/u);
     assert.equal(sent.some(item => item.startsWith('POST ')), false, '로그인(POST)은 보내지 않음');
     assert.equal(sent.some(item => item.includes('supabase.co')), false);
     assert.equal(JSON.stringify(out).includes('wrong-password-for-check'), false);

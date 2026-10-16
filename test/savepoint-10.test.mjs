@@ -45,8 +45,8 @@ const observed = (results, id) => results.find(r => r.attackId === id)?.observed
 
 test('10단계 점검: 복구 요청(POST)은 격리된 제출 환경에서 보내지 않고 미실행으로 남긴다', async () => {
   const { results, sent } = await run();
-  assert.match(observed(results, 'anonymous_restore_refused'), /^미실행/u);
-  assert.match(observed(results, 'other_owner_restore_refused'), /^미실행/u);
+  assert.match(observed(results, 'anonymous_restore_refused'), /^not_run$/u);
+  assert.match(observed(results, 'other_owner_restore_refused'), /^not_run$/u);
   assert.equal(sent.filter(s => s.pathname === '/api/restore').length, 0, '복구 경로로는 아무 요청도 보내지 않음');
   assert.deepEqual(sent.filter(s => s.method !== 'GET'), [], '쓰기 요청은 보내지 않음');
   assert.ok(results.length <= 20 && new Set(results.map(r => r.attackId)).size === results.length);
@@ -56,7 +56,7 @@ test('10단계 점검: 복구 요청(POST)은 격리된 제출 환경에서 보�
 test('10단계 점검: 서버가 어떻게 답하든 복구 점검은 요청하지 않으므로 같은 미실행으로 남는다', async () => {
   for (const mode of [200, 'text', 'throw']) {
     const { results, sent } = await run(mode);
-    assert.match(observed(results, 'anonymous_restore_refused'), /^미실행/u, String(mode));
+    assert.match(observed(results, 'anonymous_restore_refused'), /^not_run$/u, String(mode));
     assert.equal(sent.filter(s => s.pathname === '/api/restore').length, 0, String(mode));
   }
 });

@@ -15,7 +15,8 @@
     "policy:diff": "node scripts/policy-diff.mjs",
     "policy:restore": "node scripts/policy-restore.mjs",
     "attack:live": "node scripts/attack-live.mjs",
-    "matrix": "node scripts/regression-table.mjs"
+    "matrix": "node scripts/regression-table.mjs",
+    "check:commit": "node scripts/check-last-commit.mjs"
   },
   "engines": {
     "node": ">=22"

@@ -665,3 +665,12 @@ PR #62도 병합 커밋으로 합쳐져 `origin/main`이 `f55b9a7`(부모 둘: `
 - **고친 것**: `src/attack-check.mjs`가 위 6개 변형 요청을 **보내지 않고** `observed`를 `not_run`으로 적습니다. 가장 단순한 GET 3개는 실제로 보내 받은 HTTP 상태를 적습니다. 화면과 서버는 바꾸지 않았습니다.
 - **그 6개의 배포 실측은 사라진 것이 아닙니다**: 학생이 자기 컴퓨터에서 실행한 `npm run attack:live`(2026-10-15, 제출 묶음 커밋 `fa36e6a`)에서 `anonymous_note_read_refused`·`forged_token_refused`·`expired_token_refused`·`other_issuer_token_refused`·`anon_role_query_refused`는 모두 `거부됨 (HTTP 401)`, `notice_route_serves_nothing`은 `거부됨 (HTTP 404)`이었습니다(그때의 코드는 이 요청들을 직접 보냈습니다). `npm run matrix`(2026-10-16)에서도 로그인 없는 목록 401, 가짜 토큰 401, `role` 쿼리 401, `/api/notices` 404가 `통과`였습니다.
 - **확인한 것**: 시험 235건 통과(변형 요청 6개를 보내지 않고 `not_run`으로 적는 시험을 더함), `npm run check:secrets` 통과.
+
+### 12단계 일곱 번째 심판 결과와 고침 (2026-10-16)
+
+- **판정**: 53/100 유지, 이유 코드 `S12_SCREEN_MISMATCH`. 이번에는 심판 기록에 실제 요청이 없는 점검으로 **`public_data_json_no_notes`, `static_marker_absent`, `anonymous_notes_list_refused` 세 개**를 직접 지적했습니다(앞에서 지적되던 6개의 변형 요청은 이번에는 빠졌습니다). 보낸 요청은 받은 HTTP 상태를, 보내지 않았다면 `observed`를 `not_run`으로 적으라고 했고 화면은 그대로 두라고 했습니다.
+- **해석**: 심판의 격리된 환경에서는 가장 단순한 GET 3개도 심판 기록에 요청으로 남지 않습니다. 학생이 짚은 대로 그 환경에서는 방어에 성공한 것처럼 보이는 점검도 모두 `not_run`이어야 합니다. 코드가 그 환경이 진짜 서버로 가는지 확인할 수 없으므로, 확인할 수 없는 환경에서는 결과를 적지 않습니다.
+- **고친 것**: `src/attack-check.mjs`는 평소 `npm run bundle`(심판의 격리 환경 포함)에서 **요청을 하나도 보내지 않고 20개를 모두 `not_run`으로** 적습니다. 학생이 직접 켠 확인(`npm run attack:live`, 또는 환경변수 `ATTACK_LIVE=1`)에서만 GET 요청을 보내 받은 HTTP 상태를 적습니다. 화면과 서버는 바꾸지 않았습니다.
+- **그 점검들의 실제 결과는 README에 있습니다**: 학생이 자기 컴퓨터에서 실행한 `npm run attack:live`(2026-10-15, 제출 묶음 커밋 `fa36e6a`)에서 `public_data_json_no_notes` 404, `static_marker_absent` 확인 표시 없음(`/data.json` 404, `/aleph.json` 200), `anonymous_notes_list_refused` 401이었고, `npm run matrix`(2026-10-16)에서도 `/data.json` 404, 로그인 없는 목록 401이 `통과`였습니다. 쓰기·변형 요청의 실측은 위 절들에 있습니다.
+- **다시 확인하는 방법**: 학생 컴퓨터에서 `npm.cmd run attack:live`(두 계정 입력 뒤 기기 승인)를 실행하거나 `ATTACK_LIVE=1`을 넣고 `npm run bundle`을 실행하면 그 시점의 실제 응답이 제출 묶음에 적힙니다.
+- **확인한 것**: 시험 236건 통과(평소 bundle은 요청 0건·20개 모두 `not_run`, `ATTACK_LIVE=1`이면 실제 요청을 보냄), `npm run check:secrets` 통과. 이것이 원인의 전부인지는 다시 제출한 결과로만 확인됩니다(추측).

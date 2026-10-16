@@ -627,3 +627,7 @@
 - **확인한 것**: 병합 직후의 `origin/main`은 부모가 둘인 병합 커밋 `1c7693e`이고, `bundle.mjs`와 같은 명령(`git diff-tree --root --no-commit-id --name-only --no-renames -r`)이 0줄을 돌려줍니다. 실제 12단계 변경은 그 아래 일반 커밋들(`fa36e6a` 등)에 있었습니다.
 - **고친 것**: 코드는 바꾸지 않았습니다. 이 기록을 담은 일반 커밋 하나를 **Squash and merge**로 `main`에 합쳐, `main`의 마지막 커밋이 병합 커밋이 아닌 일반 커밋(바뀐 파일 `README.md`)이 되게 했습니다. 빈 커밋은 만들지 않았습니다.
 - **앞으로**: 제출 전에는 `git log -1 --format="%h %p"`로 마지막 커밋의 부모가 하나인지 확인합니다(부모가 둘이면 병합 커밋이라 `bundle`이 막힙니다). 이전 단계의 같은 주의는 2단계 저장점 절에 있습니다.
+
+### 12단계 재제출 전 확인: 병합 커밋 방지 (2026-10-16)
+
+PR #61도 기본값(병합 커밋 만들기)으로 합쳐져 `origin/main`이 `723c4c1`(부모 둘: `1c7693e`, `f807e81`)이 되었고, 같은 이유로 `bundle`이 막히는 상태였습니다. 학생이 `git log -1 --format="%h %p" origin/main`으로 부모가 둘임을 직접 확인했습니다. 고침: 병합 커밋 여부를 미리 알려 주는 읽기 전용 명령 `npm run check:commit`(`scripts/check-last-commit.mjs`)을 더하고, 이 변경을 **Squash and merge**로 합쳐 `main`의 마지막 커밋이 일반 커밋이 되게 합니다. 사용법: `git fetch origin && git checkout main && git pull` 뒤 `npm run check:commit`을 실행해 `통과: 일반 커밋이고 바뀐 파일이 있습니다.`가 나오는지 봅니다(병합 커밋이면 `확인 실패`).

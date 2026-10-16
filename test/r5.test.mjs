@@ -366,21 +366,20 @@ test('step 3 attack check sends only refusal probes and records status numbers, 
       'anonymous_notes_list_refused', 'anonymous_note_create_refused', 'anonymous_note_read_refused',
       'anonymous_note_update_refused', 'anonymous_note_delete_refused', 'forged_token_refused',
       'expired_token_refused', 'other_issuer_token_refused']);
-    assert.ok(results.slice(2).every(item => item.observed === '거부됨 (HTTP 401)'));
+    const WRITES = ['anonymous_note_create_refused', 'anonymous_note_update_refused', 'anonymous_note_delete_refused'];
+    assert.ok(results.slice(2).filter(item => !WRITES.includes(item.attackId)).every(item => item.observed === '거부됨 (HTTP 401)'));
+    assert.ok(results.filter(item => WRITES.includes(item.attackId)).every(item => /^미실행/u.test(item.observed)), '쓰기 점검은 미실행');
     assert.ok(results.every(item => Object.keys(item).sort().join() === 'attackId,expected,observed'
       && item.expected.length <= 300 && item.observed.length <= 300));
     assert.equal(JSON.stringify(results).includes('가상 본문'), false);
     assert.equal(JSON.stringify(results).includes('Bearer'), false);
-    // 쓰기 요청은 빈 본문이거나 존재하지 않는 id라서 로그인 확인이 뚫려도 자료가 생기거나 바뀌지 않습니다.
-    const writes = sent.filter(item => ['POST', 'PUT', 'DELETE'].includes(item.method));
-    assert.deepEqual(writes.map(item => item.method), ['POST', 'PUT', 'DELETE']);
-    assert.ok(writes.filter(item => item.body !== undefined).every(item => item.body === '{}'));
-    assert.ok(writes.slice(1).every(item => item.path === '/api/notes/00000000-0000-4000-8000-000000000000'));
+    // 심판의 격리된 제출 환경에서는 GET만 되므로, 쓰기 요청(POST·PUT·DELETE)은 아예 보내지 않습니다.
+    assert.deepEqual(sent.filter(item => item.method !== 'GET'), [], '쓰기 요청은 보내지 않음');
     const open = await run(200);
-    assert.ok(open.slice(2).every(item => item.observed === '거부되지 않음 (HTTP 200)'));
+    assert.ok(open.slice(2).filter(item => !WRITES.includes(item.attackId)).every(item => item.observed === '거부되지 않음 (HTTP 200)'));
     // 앱이 아닌 곳(접속 허용 목록·방화벽)이 보낸 403은 거부됨으로 적지 않고 확인하지 못함으로 적습니다.
     const blocked = await run('proxy');
-    assert.ok(blocked.slice(2).every(item => item.observed === '확인하지 못함 (HTTP 403, 앱의 응답으로 보이지 않음)'));
+    assert.ok(blocked.slice(2).filter(item => !WRITES.includes(item.attackId)).every(item => item.observed === '확인하지 못함 (HTTP 403, 앱의 응답으로 보이지 않음)'));
     // 앱이 401이 아닌 다른 오류 JSON(예: 로그인 확인 전에 입력 검사에서 400)을 주면 거부로 치지 않습니다.
     assert.ok(!JSON.stringify(blocked).includes('거부됨 ('));
   } finally {
@@ -636,7 +635,8 @@ test('step 5 attack check: with no key in the page the direct probe is not run, 
     const out = await runAttackChecks({ ...config, ...realConfig });
     assert.ok(out.length <= 20);
     assert.match(out.find(i => i.attackId === 'anon_data_api_notes_refused').observed, /^미실행/u);
-    assert.equal(out.find(i => i.attackId === 'wrong_password_login_refused').observed, '거부됨 (HTTP 401)');
+    assert.match(out.find(i => i.attackId === 'wrong_password_login_refused').observed, /^미실행/u);
+    assert.equal(sent.some(item => item.startsWith('POST ')), false, '로그인(POST)은 보내지 않음');
     assert.equal(sent.some(item => item.includes('supabase.co')), false);
     assert.equal(JSON.stringify(out).includes('wrong-password-for-check'), false);
   } finally {

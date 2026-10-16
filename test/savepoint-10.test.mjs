@@ -43,22 +43,22 @@ async function run(restore = 401) {
 }
 const observed = (results, id) => results.find(r => r.attackId === id)?.observed;
 
-test('10단계 점검: 로그인 없는 복구 요청만 보내고, 다른 계정 복구는 미실행으로 남긴다', async () => {
+test('10단계 점검: 복구 요청(POST)은 격리된 제출 환경에서 보내지 않고 미실행으로 남긴다', async () => {
   const { results, sent } = await run();
-  assert.equal(observed(results, 'anonymous_restore_refused'), '거부됨 (HTTP 401)');
+  assert.match(observed(results, 'anonymous_restore_refused'), /^미실행/u);
   assert.match(observed(results, 'other_owner_restore_refused'), /^미실행/u);
-  const restores = sent.filter(s => s.pathname === '/api/restore');
-  assert.equal(restores.length, 1);
-  assert.deepEqual([restores[0].method, restores[0].auth], ['POST', null], '로그인 값 없이 POST 한 번');
-  assert.deepEqual(JSON.parse(restores[0].body), { id: '00000000-0000-4000-8000-000000000000' });
+  assert.equal(sent.filter(s => s.pathname === '/api/restore').length, 0, '복구 경로로는 아무 요청도 보내지 않음');
+  assert.deepEqual(sent.filter(s => s.method !== 'GET'), [], '쓰기 요청은 보내지 않음');
   assert.ok(results.length <= 20 && new Set(results.map(r => r.attackId)).size === results.length);
   assert.ok(results.every(r => Object.keys(r).sort().join() === 'attackId,expected,observed'));
 });
 
-test('10단계 점검: 거부되지 않으면 그대로 적고, 앱 응답이 아니거나 접속 실패면 지어내지 않는다', async () => {
-  assert.match(observed((await run(200)).results, 'anonymous_restore_refused'), /^거부되지 않음 또는 예상 밖 응답 \(HTTP 200\)$/u);
-  assert.match(observed((await run('text')).results, 'anonymous_restore_refused'), /^확인하지 못함 \(HTTP 403/u);
-  assert.equal(observed((await run('throw')).results, 'anonymous_restore_refused'), '확인하지 못함 (요청을 보내지 못함)');
+test('10단계 점검: 서버가 어떻게 답하든 복구 점검은 요청하지 않으므로 같은 미실행으로 남는다', async () => {
+  for (const mode of [200, 'text', 'throw']) {
+    const { results, sent } = await run(mode);
+    assert.match(observed(results, 'anonymous_restore_refused'), /^미실행/u, String(mode));
+    assert.equal(sent.filter(s => s.pathname === '/api/restore').length, 0, String(mode));
+  }
 });
 
 // ---- 판정기: 계약의 요청 이름만 읽고, 모든 가상 요청에 다섯 항목 응답을 돌려준다 ----

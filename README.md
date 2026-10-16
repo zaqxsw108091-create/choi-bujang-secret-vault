@@ -635,3 +635,13 @@ PR #61도 기본값(병합 커밋 만들기)으로 합쳐져 `origin/main`이 `7
 ### 12단계 재제출 전 두 번째 확인 (2026-10-16)
 
 PR #62도 병합 커밋으로 합쳐져 `origin/main`이 `f55b9a7`(부모 둘: `723c4c1`, `b9b1b77`)이 되었습니다. 합치기 화면에서는 이 저장소가 병합 커밋만 만드는 것으로 보여, 화면 대신 명령으로 고쳤습니다. 작업 브랜치를 `main` 끝(`f55b9a7`)에서 이어 일반 커밋 하나를 더 올린 뒤, `main`을 그 커밋으로 **빨리감기(fast-forward)** 해서 병합 커밋 없이 `main`의 마지막 커밋이 일반 커밋이 되게 했습니다(`git merge --ff-only`). 학생이 `npm run check:commit`으로 `통과`를 확인합니다. 이 기록은 그 일반 커밋의 변경입니다.
+
+### 12단계 두 번째 심판 결과와 고침 (2026-10-16)
+
+- **판정**: 이번 판정 0점(가장 높은 점수 45/100이 남음), 이유 코드 `S12_BUNDLE_UNSUPPORTED`. 심판의 **격리된 제출 환경**에서 `npm run bundle`이 쓸 수 없는 기능(공개 HTTPS 주소로 보내는 `GET`·`HEAD` 이외의 요청)을 써서 끝까지 실행되지 못했습니다. `src/attack-check.mjs`에 `POST`·`PUT`·`DELETE`로 보내는 점검(로그인 없는 메모 추가·수정·삭제, 가짜 계정 로그인, 로그인 없는 복구·기기 승인, 남의 메모 수정·삭제·복구)이 있었습니다.
+- **고친 것**: `src/attack-check.mjs`에서 쓰기 요청을 **모두 없앴습니다.** 해당 점검 9개(`anonymous_note_create_refused`, `anonymous_note_update_refused`, `anonymous_note_delete_refused`, `wrong_password_login_refused`, `anonymous_restore_refused`, `anonymous_device_approval_refused`, `other_owner_update_refused`, `other_owner_delete_refused`, `other_owner_restore_refused`)은 요청하지 않고 `observed`를 `미실행 (쓰기 요청이 필요해 격리된 제출 환경에서는 보내지 않음. …)`으로 기록합니다. 점검 개수(20개)와 `attackId`는 그대로입니다. `GET` 점검(`/data.json`, 로그인 없는 목록·한 건 읽기, 가짜·만료·다른 발급자 토큰, anon 키 직접 조회, `role` 쿼리, `/api/notices`, 두 계정이 있을 때의 남의 메모 읽기)은 유지했습니다. `src/attack-check.mjs`는 `import` 없이 `fetch`와 `AbortSignal`만 씁니다.
+- **쓰기 점검의 배포 실측은 사라진 것이 아닙니다.** 같은 요청의 거부 결과는 학생이 자기 컴퓨터에서 실행한 기록으로 남아 있습니다.
+  - `npm run attack:live`(2026-10-15, 제출 묶음 커밋 `fa36e6a`)에서 `anonymous_note_create/update/delete_refused` 401, `wrong_password_login_refused` 401, `anonymous_restore_refused` 401, `anonymous_device_approval_refused` 401, `other_owner_update/delete/restore_refused` 403으로 모두 `거부됨`이었습니다(이 시점의 코드는 쓰기 요청을 직접 보냈습니다).
+  - `npm run matrix`(2026-10-16)의 B가 A의 메모를 수정·삭제·복구 요청한 줄이 모두 403, 로그인 없는 복구 401, 로그인 없는 기기 승인 401, 없는 계정 로그인 401로 `통과`였습니다. 이 명령(`scripts/regression-table.mjs`)은 학생 컴퓨터에서만 실행되고 `npm run bundle`이 부르지 않습니다.
+  - 따라서 지금부터 제출 묶음의 쓰기 점검 9개는 `미실행`이고, 그 실측은 위 두 기록에 있습니다.
+- **확인한 것**: 시험 236건 통과(`test/attack-check.test.mjs`에 "GET 말고는 아무 요청도 보내지 않는다" 시험을 더함), `npm run check:secrets` 통과. 격리 환경은 아니지만 접속이 없는 이 환경에서 `npm run bundle`이 오류 없이 끝나고 보낸 요청이 GET뿐임을 확인했습니다. 심판 환경에서 통과하는지는 다시 제출한 결과로만 확인됩니다(추측).

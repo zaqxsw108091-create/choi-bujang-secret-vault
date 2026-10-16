@@ -46,6 +46,9 @@ async function run({ env = {}, mode = 'refuse', step = 10, needDevice = false } 
 }
 const observed = (results, id) => results.find(r => r.attackId === id)?.observed;
 const CROSS = ['other_owner_read_refused', 'other_owner_update_refused', 'other_owner_delete_refused', 'other_owner_restore_refused'];
+const READ = 'other_owner_read_refused';
+const WRITES = ['other_owner_update_refused', 'other_owner_delete_refused', 'other_owner_restore_refused'];
+const isUnrun = (results, ids) => ids.every(id => /^미실행/u.test(observed(results, id) ?? ''));
 const BOTH = { ATTACK_TOKEN_OWNER: OWNER, ATTACK_TOKEN_OTHER: OTHER, ATTACK_ANON_KEY: ANON };
 
 test('환경변수가 없으면 5개 모두 이전과 같은 미실행이고, 로그인 값은 보내지 않는다', async () => {
@@ -56,23 +59,22 @@ test('환경변수가 없으면 5개 모두 이전과 같은 미실행이고, �
   assert.ok(!sent.some(s => s.path.includes(NOTE)));
 });
 
-test('토큰·키를 넣으면 5개를 보내고, 모두 기대대로 거부됨으로 적는다', async () => {
+test('토큰·키를 넣으면 읽기(GET) 2개만 보내 거부됨으로 적고, 쓰기가 필요한 3개는 미실행으로 남긴다', async () => {
   const { results } = await run({ env: BOTH });
-  for (const id of CROSS) assert.equal(observed(results, id), '거부됨 (HTTP 403)', id);
+  assert.equal(observed(results, READ), '거부됨 (HTTP 403)');
+  assert.ok(isUnrun(results, WRITES));
   assert.equal(observed(results, 'anon_data_api_notes_refused'), '거부됨 (HTTP 401, 권한 없음 42501)');
   assert.equal(results.length, 19);
   assert.ok(results.every(r => Object.keys(r).sort().join() === 'attackId,expected,observed' && r.observed.length <= 300));
 });
 
-test('보낸 요청: 주인 토큰은 목록 읽기에만, 다른 계정 토큰이 남의 메모에 읽기·수정·삭제·복구를 한 번씩', async () => {
+test('보낸 요청: 모두 GET이고, 주인 토큰은 목록 읽기에만, 다른 계정 토큰은 목록과 남의 메모 읽기에만 쓴다', async () => {
   const { sent } = await run({ env: BOTH });
   const ownerUses = sent.filter(s => s.auth === `Bearer ${OWNER}`);
   assert.deepEqual(ownerUses.map(s => `${s.method} ${s.path}`), ['GET /api/notes']);
   const otherUses = sent.filter(s => s.auth === `Bearer ${OTHER}`).map(s => `${s.method} ${s.path}`);
-  assert.deepEqual(otherUses, ['GET /api/notes', `GET /api/notes/${NOTE}`, `PUT /api/notes/${NOTE}`, `DELETE /api/notes/${NOTE}`, 'POST /api/restore']);
-  const put = sent.find(s => s.method === 'PUT' && s.path.includes(NOTE));
-  assert.deepEqual(JSON.parse(put.body), { title: 'x', body: 'y' });
-  assert.deepEqual(JSON.parse(sent.find(s => s.path === '/api/restore' && s.auth).body), { id: NOTE });
+  assert.deepEqual(otherUses, ['GET /api/notes', `GET /api/notes/${NOTE}`]);
+  assert.deepEqual(sent.filter(s => s.method !== 'GET'), [], '쓰기 요청은 보내지 않음');
   assert.equal(sent.find(s => s.host.endsWith('.supabase.co')).apikey, ANON);
 });
 
@@ -84,18 +86,21 @@ test('결과 어디에도 토큰·키·메모 id·제목·본문이 없다', asy
 
 test('거부되지 않으면(200) 그대로 적는다', async () => {
   const { results } = await run({ env: BOTH, mode: 'open' });
-  for (const id of CROSS) assert.equal(observed(results, id), '거부되지 않음 (HTTP 200)', id);
+  assert.equal(observed(results, READ), '거부되지 않음 (HTTP 200)');
+  assert.ok(isUnrun(results, WRITES));
 });
 
-test('두 토큰이 같은 계정이면 수정·삭제를 보내지 않고 확인하지 못함으로 적는다', async () => {
+test('두 토큰이 같은 계정이면 남의 메모 읽기를 보내지 않고 확인하지 못함으로 적는다', async () => {
   const { results, sent } = await run({ env: BOTH, mode: 'same' });
-  for (const id of CROSS) assert.match(observed(results, id), /^확인하지 못함 \(두 토큰이 같은 계정/u, id);
+  assert.match(observed(results, READ), /^확인하지 못함 \(두 토큰이 같은 계정/u);
+  assert.ok(isUnrun(results, WRITES));
   assert.ok(!sent.some(s => s.path.includes(NOTE) || (s.path === '/api/restore' && s.auth === `Bearer ${OTHER}`)));
 });
 
 test('B에게 메모가 없으면 보내지 않고 확인하지 못함으로 적는다', async () => {
   const { results, sent } = await run({ env: BOTH, mode: 'empty' });
-  for (const id of CROSS) assert.match(observed(results, id), /^확인하지 못함 \(B 계정의 메모 목록을 읽지 못함/u, id);
+  assert.match(observed(results, READ), /^확인하지 못함 \(B 계정의 메모 목록을 읽지 못함/u);
+  assert.ok(isUnrun(results, WRITES));
   assert.ok(!sent.some(s => s.path.includes(NOTE) || (s.path === '/api/restore' && s.auth === `Bearer ${OTHER}`)));
 });
 
@@ -112,7 +117,7 @@ test('모양이 틀린 토큰·키, 하나만 있는 경우는 미실행으로 �
 test('9단계 설정에서는 복구 점검이 없다', async () => {
   const { results } = await run({ env: BOTH, step: 9 });
   assert.equal(observed(results, 'other_owner_restore_refused'), undefined);
-  assert.equal(observed(results, 'other_owner_update_refused'), '거부됨 (HTTP 403)');
+  assert.match(observed(results, 'other_owner_update_refused'), /^미실행/u);
 });
 
 test('점검 코드와 이 시험 파일에 키·토큰 모양의 실제 값이 없다(프로젝트 비밀값 검사기 기준)', () => {
@@ -123,11 +128,12 @@ test('점검 코드와 이 시험 파일에 키·토큰 모양의 실제 값이 
 
 test('11단계 이후: 기기 서명이 없으면 확인하지 못함(원인 안내), 승인된 기기의 서명을 걸면 거부됨으로 적는다', async () => {
   const without = await run({ env: BOTH, step: 12, needDevice: true });
-  for (const id of CROSS) assert.match(observed(without.results, id), /^확인하지 못함 \(B 계정의 메모 목록을 읽지 못함: HTTP 403, 11단계부터는 승인된 기기의 서명이 필요함\)$/u, id);
+  assert.match(observed(without.results, READ), /^확인하지 못함 \(B 계정의 메모 목록을 읽지 못함: HTTP 403, 11단계부터는 승인된 기기의 서명이 필요함\)$/u);
   const key = Symbol.for('aleph.attack.devices');
   globalThis[key] = { OWNER: { proof: async () => ({ 'X-Device-Key': 'owner-device' }) }, OTHER: { proof: async () => ({ 'X-Device-Key': 'other-device' }) } };
   try {
     const withDevice = await run({ env: BOTH, step: 12, needDevice: true });
-    for (const id of CROSS) assert.equal(observed(withDevice.results, id), '거부됨 (HTTP 403)', id);
+    assert.equal(observed(withDevice.results, READ), '거부됨 (HTTP 403)');
+    assert.ok(isUnrun(withDevice.results, WRITES));
   } finally { delete globalThis[key]; }
 });

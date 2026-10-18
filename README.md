@@ -499,7 +499,7 @@
 - 차단·알림: `node xdr/exfiltration/respond.mjs`가 `block` 주소만 1시간 만료 거부 규칙(`xdr/exfiltration/block-rules.json`, 근거 경보 번호 포함)으로 만들고, 정상 이벤트에도 나온 주소는 뺍니다. `block`·`alert`는 `xdr/alerts.log`에 한 줄씩 쌓습니다(경보 번호 앞글자 `ex-`). `src/xdr-block.mjs`가 이 규칙 파일도 읽습니다. `src/decider.mjs`는 바꾸지 않았습니다. `block-rules.json`과 `alerts.log`는 Git에 올리지 않습니다.
 - 다시 실행: `npm run xdr:run -- exfiltration`이 `xdr/exfiltration/result.json`을 만듭니다. 정상 결과는 `counts` = `block` 10 · `alert` 10 · `record` 10이고(ex-01~10 block, ex-11~20 alert, ex-21~30 record), 정상 이벤트(ex-21~30)가 `block`이면 안 됩니다. 공격 주소는 ex-01·ex-02가 같아 거부 규칙은 9개입니다.
 - 시험: `node --test test/xdr-exfiltration.test.mjs`(6건). 표현을 바꾼 가상 경보와 "나가지 않았습니다"처럼 부정하는 문장(막지 않음)도 확인합니다. 시험 전에 `npm ci`가 필요합니다.
-- 한계: 패턴 조건은 경보 설명 문장만 봅니다. 전송 용량·파일 수·평소 전송량 기준선은 보지 않으므로(`data.count`·`data.bytes`는 확신도만 조금 올림), 설명 문장이 전혀 다르게 쓰인 유출은 놓칠 수 있습니다. 같은 주소의 경보를 합산하지 않고 경보 하나씩 판단합니다. 배포 서버에서 막으려면 `node xdr/exfiltration/respond.mjs --db`가 필요하며 이 환경에서는 실행하지 못했습니다. 배포된 Vercel 서버에서 실제로 403이 나오는지도 확인하지 못했고, 위 403은 같은 코드를 시험에서 직접 불러 확인한 것입니다.
+- 한계: 패턴 조건은 경보 설명 문장만 봅니다. 전송 용량·파일 수·평소 전송량 기준선은 보지 않으므로(`data.count`·`data.bytes`는 확신도만 조금 올림), 설명 문장이 전혀 다르게 쓰인 유출은 놓칠 수 있습니다. 표현 변형(처음 보는·알 수 없는·평소와 다른 목적지, 외부 서버·클라우드 저장소, 새벽·업무 시간 밖, DNS 터널, 영문 문장 등)은 시험 15건으로 확인했습니다. 같은 주소의 경보를 합산하지 않고 경보 하나씩 판단합니다. 배포 서버에서 막으려면 `node xdr/exfiltration/respond.mjs --db`가 필요하며 이 환경에서는 실행하지 못했습니다. 배포된 Vercel 서버에서 실제로 403이 나오는지도 확인하지 못했고, 위 403은 같은 코드를 시험에서 직접 불러 확인한 것입니다.
 
 ### 10단계 감사 이력 파일 (여섯 번째 제출 전)
 `policy/restore-audit.jsonl`이 저장소에 한 번도 없어서, 저장소를 읽는 쪽에서 "감사 이력이 없다"고 볼 수 있다고 의심했습니다(추측). `npm run policy:restore -- --apply`를 실제로 실행해 "사본 검증, 바뀐 항목 0건" 한 줄(`policy_restore_checked`)을 덧붙이고 파일을 커밋했습니다. 정책 값은 바꾸지 않았고, 이력은 덧붙이기만 합니다. 이 추측이 맞는지는 다시 제출한 결과로만 확인됩니다.

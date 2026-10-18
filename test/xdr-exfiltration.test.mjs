@@ -115,13 +115,35 @@ test('ZTNA 거부 규칙 읽기: 기본 경로가 exfiltration 규칙 파일도 
 
 test('decide: 표현을 바꾼 경보도 같은 답이고, 부정하는 문장은 막지 않는다', () => {
   const ask = (level, description, data = {}) => decide({ id: 'x', rule: { level, description }, data: { srcip: '192.0.2.1', srcuser: 'u', ...data } }).action;
-  assert.equal(ask(12, '처음 보는 목적지로 자료 500건이 한꺼번에 나갔습니다.'), 'block');
-  assert.equal(ask(11, '새벽에 처음 보는 주소로 메모 묶음이 나갔습니다.'), 'block');
-  assert.equal(ask(12, '수업 시간 밖에 압축 파일이 외부로 올라갔습니다.'), 'block');
-  assert.equal(ask(11, '명령 통로로 큰 파일이 반복해서 나갔습니다.'), 'block');
-  for (const text of ['처음 보는 목적지로 자료 500건이 나가지 않았습니다.', '수업 시간 밖 압축 파일 전송은 차단되어 나가지 않았습니다.']) {
-    assert.notEqual(ask(12, text), 'block', text);
-  }
+  const attacks = [
+    [12, '처음 보는 목적지로 자료 500건이 한꺼번에 나갔습니다.'],
+    [12, '처음 보는 외부 서버로 고객 자료 1000건이 한꺼번에 전송됐습니다.'],
+    [12, '처음 보는 목적지로 대용량 파일이 업로드됐습니다.'],
+    [11, '새벽에 처음 보는 주소로 메모 묶음이 나갔습니다.'],
+    [12, '수업 시간 밖에 압축 파일이 외부로 올라갔습니다.'],
+    [11, '업무 시간 밖에 압축 파일이 외부로 반출됐습니다.'],
+    [12, '새벽에 압축 파일이 처음 보는 주소로 전송됐습니다.'],
+    [12, '평소 쓰지 않는 목적지로 큰 전송이 있었습니다.'],
+    [11, '알 수 없는 주소로 데이터 수십 GB가 나갔습니다.'],
+    [12, 'DNS 터널로 자료가 계속 빠져나갔습니다.'],
+    [11, '명령 통로로 큰 파일이 반복해서 나갔습니다.'],
+    [11, '명령 통로를 통해 큰 파일이 반복 유출됐습니다.'],
+    [12, '처음 보는 클라우드 저장소로 자료 전체가 올라갔습니다.'],
+    [12, 'Large archive was sent to a first-seen external destination.'],
+    [12, '평소와 다른 포트로 파일이 연속 전송됐습니다.'],
+  ];
+  for (const [level, text] of attacks) assert.equal(ask(level, text), 'block', text);
+  const notBlocked = [
+    '처음 보는 목적지로 자료 500건이 나가지 않았습니다.',
+    '수업 시간 밖 압축 파일 전송은 차단되어 나가지 않았습니다.',
+    '새벽에 압축 파일 외부 전송이 차단되어 나가지 않았습니다.',
+    '처음 보는 외부 서버로 큰 전송이 있었으나 막혔습니다.',
+    '명령 통로에 짧은 자료 이름이 3번 보였습니다. 큰 파일은 아닙니다.',
+    '처음 보는 주소로 작은 파일이 2건 나갔습니다.',
+    '수업 시간에 압축 파일 1건을 만들었습니다. 외부 전송은 아직 없습니다.',
+  ];
+  for (const text of notBlocked) assert.notEqual(ask(12, text), 'block', text);
   assert.equal(ask(3, '내 메모 한 건을 읽었습니다.'), 'record');
   assert.equal(ask(3, '수업 자료 주소로 작은 동기화가 끝났습니다.'), 'record');
+  assert.equal(ask(4, '평소 목적지로 백업 전송 1건이 있었습니다.'), 'record');
 });

@@ -14,3 +14,4 @@ xdr/web-injection/block-rules.json
 xdr/known-cve/block-rules.json
 xdr/persistence/block-rules.json
 xdr/privilege/block-rules.json
+xdr/exfiltration/block-rules.json

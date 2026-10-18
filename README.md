@@ -479,6 +479,17 @@
 - 시험: `node --test test/xdr-persistence.test.mjs`(5건). 시험 전에 `npm ci`가 필요합니다.
 - 한계: 패턴 조건은 경보 설명 문장만 봅니다(`data.path`는 확신도에만 반영). 같은 주소의 경보를 합산하지 않고 경보 하나씩 판단합니다. `respond.mjs --db`(공유 저장소 올리기)와 배포된 Vercel 서버의 실제 403은 실행·확인하지 못했습니다. API 403은 같은 코드를 시험에서 직접 불러 확인한 것입니다.
 
+## 보너스 xdr-05: 권한 가로채기 잡기 (저장점)
+
+시험 경보(`xdr/fixtures/privilege.json`, Wazuh 모양 가상 경보 26건)로 연습한 결과입니다. 심판의 판정이 아닙니다. 운영 반 엔진의 사건 전달·접속 회수는 연결되지 않았습니다.
+
+- 지금 작동하는 기능: `xdr/privilege/decide.mjs`의 `decide(alert)`가 `{ action, confidence, reason }`을 돌려줍니다(import 없음, 파일·네트워크 사용 없음). 경보 설명이 패턴 조건을 모두 채우면 `block`(0.85 이상), 관리자·권한·그룹 흔적만 있으면 `alert`(0.5~0.75), 흔적이 없거나 수준이 낮고 읽기만 한 기록이면 `record`입니다. 패턴 3개(`admin-group-added` T1078, `unfamiliar-admin-command` T1068, `off-hours-admin-use` T1078)와 근거는 `xdr/privilege/patterns.json`에 있고 `decide.mjs` 맨 위 상수와 같습니다.
+- 확인용 읽기: `node xdr/privilege/read-alerts.mjs`가 시각·출발 주소·계정·수준·설명만 뽑습니다(`decide.mjs`는 이 파일을 부르지 않음).
+- 차단·알림: `node xdr/privilege/respond.mjs`가 `block` 주소만 1시간 만료 거부 규칙(`xdr/privilege/block-rules.json`, 근거 경보 번호 포함)으로 만들고, 정상 이벤트에도 나온 주소는 뺍니다. `block`·`alert`는 `xdr/alerts.log`에 한 줄씩 쌓습니다(경보 번호 앞글자 `pv-`). `src/xdr-block.mjs`가 이 규칙 파일도 읽습니다. `src/decider.mjs`는 바꾸지 않았습니다. `block-rules.json`과 `alerts.log`는 Git에 올리지 않습니다.
+- 다시 실행: `npm run xdr:run -- privilege`가 `xdr/privilege/result.json`을 만듭니다. 정상 결과는 `counts` = `block` 9 · `alert` 8 · `record` 9이고(pv-01~09 block, pv-10~17 alert, pv-18~26 record), 정상 이벤트(pv-18~26)가 `block`이면 안 됩니다. 공격 주소는 pv-01·pv-02가 같아 거부 규칙은 8개입니다.
+- 시험: `node --test test/xdr-privilege.test.mjs`(6건). 표현을 바꾼 가상 경보와 "추가되지 않았습니다"처럼 부정하는 문장(막지 않음)도 확인합니다. 시험 전에 `npm ci`가 필요합니다.
+- 한계: 패턴 조건은 경보 설명 문장만 봅니다. 같은 주소의 경보를 합산하지 않고 경보 하나씩 판단합니다. 거부는 출발 주소 기준이라, 계정 세션 회수는 하지 않습니다. `respond.mjs --db`(공유 저장소 올리기)와 배포된 Vercel 서버의 실제 403은 실행·확인하지 못했습니다. API 403은 같은 코드를 시험에서 직접 불러 확인한 것입니다.
+
 ### 10단계 감사 이력 파일 (여섯 번째 제출 전)
 `policy/restore-audit.jsonl`이 저장소에 한 번도 없어서, 저장소를 읽는 쪽에서 "감사 이력이 없다"고 볼 수 있다고 의심했습니다(추측). `npm run policy:restore -- --apply`를 실제로 실행해 "사본 검증, 바뀐 항목 0건" 한 줄(`policy_restore_checked`)을 덧붙이고 파일을 커밋했습니다. 정책 값은 바꾸지 않았고, 이력은 덧붙이기만 합니다. 이 추측이 맞는지는 다시 제출한 결과로만 확인됩니다.
 

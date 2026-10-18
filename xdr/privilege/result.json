@@ -1,0 +1,167 @@
+{
+  "schema": "aleph.xdr.result.v1",
+  "moduleKey": "privilege",
+  "decisions": [
+    {
+      "alertId": "pv-01",
+      "action": "block",
+      "confidence": 0.91,
+      "reason": "패턴 일치: admin-group-added"
+    },
+    {
+      "alertId": "pv-02",
+      "action": "block",
+      "confidence": 0.91,
+      "reason": "패턴 일치: unfamiliar-admin-command"
+    },
+    {
+      "alertId": "pv-03",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "패턴 일치: unfamiliar-admin-command, off-hours-admin-use"
+    },
+    {
+      "alertId": "pv-04",
+      "action": "block",
+      "confidence": 0.91,
+      "reason": "패턴 일치: admin-group-added"
+    },
+    {
+      "alertId": "pv-05",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "패턴 일치: admin-group-added"
+    },
+    {
+      "alertId": "pv-06",
+      "action": "block",
+      "confidence": 0.91,
+      "reason": "패턴 일치: unfamiliar-admin-command"
+    },
+    {
+      "alertId": "pv-07",
+      "action": "block",
+      "confidence": 0.95,
+      "reason": "패턴 일치: admin-group-added, off-hours-admin-use"
+    },
+    {
+      "alertId": "pv-08",
+      "action": "block",
+      "confidence": 0.91,
+      "reason": "패턴 일치: unfamiliar-admin-command"
+    },
+    {
+      "alertId": "pv-09",
+      "action": "block",
+      "confidence": 0.9,
+      "reason": "패턴 일치: admin-group-added"
+    },
+    {
+      "alertId": "pv-10",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "애매함: 관리자·권한·그룹 흔적은 있으나 패턴 조건을 다 채우지 못함"
+    },
+    {
+      "alertId": "pv-11",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "애매함: 관리자·권한·그룹 흔적은 있으나 패턴 조건을 다 채우지 못함"
+    },
+    {
+      "alertId": "pv-12",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "애매함: 관리자·권한·그룹 흔적은 있으나 패턴 조건을 다 채우지 못함"
+    },
+    {
+      "alertId": "pv-13",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "애매함: 관리자·권한·그룹 흔적은 있으나 패턴 조건을 다 채우지 못함"
+    },
+    {
+      "alertId": "pv-14",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "애매함: 관리자·권한·그룹 흔적은 있으나 패턴 조건을 다 채우지 못함"
+    },
+    {
+      "alertId": "pv-15",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "애매함: 관리자·권한·그룹 흔적은 있으나 패턴 조건을 다 채우지 못함"
+    },
+    {
+      "alertId": "pv-16",
+      "action": "alert",
+      "confidence": 0.55,
+      "reason": "애매함: 관리자·권한·그룹 흔적은 있으나 패턴 조건을 다 채우지 못함"
+    },
+    {
+      "alertId": "pv-17",
+      "action": "alert",
+      "confidence": 0.5,
+      "reason": "애매함: 관리자·권한·그룹 흔적은 있으나 패턴 조건을 다 채우지 못함"
+    },
+    {
+      "alertId": "pv-18",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "정상 이벤트: 권한 상승 패턴 신호가 없음"
+    },
+    {
+      "alertId": "pv-19",
+      "action": "record",
+      "confidence": 0.2,
+      "reason": "정상 이벤트: 흔적이 있으나 읽기만 한 평소 모습이라 패턴과 맞지 않음"
+    },
+    {
+      "alertId": "pv-20",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "정상 이벤트: 권한 상승 패턴 신호가 없음"
+    },
+    {
+      "alertId": "pv-21",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "정상 이벤트: 권한 상승 패턴 신호가 없음"
+    },
+    {
+      "alertId": "pv-22",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "정상 이벤트: 권한 상승 패턴 신호가 없음"
+    },
+    {
+      "alertId": "pv-23",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "정상 이벤트: 권한 상승 패턴 신호가 없음"
+    },
+    {
+      "alertId": "pv-24",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "정상 이벤트: 권한 상승 패턴 신호가 없음"
+    },
+    {
+      "alertId": "pv-25",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "정상 이벤트: 권한 상승 패턴 신호가 없음"
+    },
+    {
+      "alertId": "pv-26",
+      "action": "record",
+      "confidence": 0.05,
+      "reason": "정상 이벤트: 권한 상승 패턴 신호가 없음"
+    }
+  ],
+  "counts": {
+    "block": 9,
+    "alert": 8,
+    "record": 9
+  }
+}

@@ -11,3 +11,4 @@ supabase/
 xdr/alerts.log
 xdr/brute-force/block-rules.json
 xdr/web-injection/block-rules.json
+xdr/known-cve/block-rules.json

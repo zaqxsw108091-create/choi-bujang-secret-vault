@@ -36,7 +36,7 @@
         "flags": "i",
         "requires": "descriptionRegex+regex"
       },
-      "evidence": "근거: 과제 안내문이 든 신호(알려진 취약점 점검 도구의 흔적)와 CVE-2021-44228 형태 요청의 동시 출현. MITRE ATT&CK T1190(외부 공개 앱 악용)."
+      "evidence": "근거: CVE-2021-44228 형태 요청(NIST NVD)과 MITRE ATT&CK T1190(외부 공개 앱 악용) — 신호는 알려진 취약점 점검 도구의 흔적이고, 단독이 아니라 같은 경보에 원격 조회 구문이 함께 있을 때만 쓴다."
     }
   ]
 }

@@ -464,7 +464,7 @@
 - 차단·알림: `node xdr/known-cve/respond.mjs`가 `block` 주소만 1시간 만료 거부 규칙(`xdr/known-cve/block-rules.json`, 근거 경보 번호 포함)으로 만들고, 정상 이벤트에도 나온 주소는 뺍니다. `block`·`alert`는 `xdr/alerts.log`에 한 줄씩 쌓습니다(경보 번호 앞글자 `kc-`). `src/xdr-block.mjs`가 이 규칙 파일도 읽습니다. `src/decider.mjs`는 바꾸지 않았습니다. `block-rules.json`과 `alerts.log`는 Git에 올리지 않습니다.
 - 다시 실행: `npm run xdr:run -- known-cve`가 `xdr/known-cve/result.json`을 만듭니다. 정상 결과는 `counts` = `block` 8 · `alert` 8 · `record` 8이고(kc-01~08 block, kc-09~16 alert, kc-17~24 record), 정상 이벤트(kc-17~24)가 `block`이면 안 됩니다.
 - 쪼갠 표기: `${${lower:j}ndi:…}`, `${${::-j}…}`, `${env:x:-j}` 처럼 글자를 쪼갠 표기는 `decide.mjs`가 `lower`·`upper`·기본값(`:-`) 조회만 풀어 본 뒤, 풀어서 완전한 조회 구문이 되면 같은 패턴으로 `block`(이유 끝에 "쪼갠 표기를 풀어서")하고 아니면 `alert`입니다. 이 풀이는 이 저장소 시험(`test/xdr-known-cve.test.mjs`)에서 쓴 표기 5가지로만 확인했고, 다른 쪼갠 표기까지 모두 잡는다는 뜻은 아닙니다.
-- 근거의 한계: 패턴 3(`vuln-scanner-trace-with-lookup`)의 근거는 과제 안내문이고, 단독으로 `block`하지 않으며 조회 구문이 있을 때 확신도를 더하는 보조 신호입니다. 코딩 도구 환경은 외부 사이트(MITRE·NVD)에 접속할 수 없어 근거 출처를 새로 확인하지 못했고, 확인하지 못한 출처는 더하지 않았습니다.
+- 패턴 3 근거: 패턴 3(`vuln-scanner-trace-with-lookup`)은 과제가 준 근거(CVE-2021-44228 형태 요청, MITRE ATT&CK T1190)와 신호(알려진 취약점 점검 도구의 흔적)를 그대로 따릅니다. 점검 흔적은 단독으로 `block`하지 않고 같은 경보에 원격 조회 구문이 있을 때 확신도를 더하는 보조 신호입니다. 코딩 도구 환경에서는 외부 사이트에 접속할 수 없어 출처 페이지를 열어 보지는 못했습니다.
 - 시험: `node --test test/xdr-known-cve.test.mjs`(10건: 건수·패턴 일치·import 없음·구분·다른 모양 경보·규칙·로그·로그인/자료 API 403). 전체 `node --test test/*.test.mjs`는 `npm ci`로 패키지를 설치한 뒤 실행했을 때 통과했습니다.
 - 한계: 같은 주소의 경보를 합산하지 않고 경보 하나씩 판단합니다. 배포 서버에서 막으려면 `node xdr/known-cve/respond.mjs --db`가 필요하며, 이 환경에는 Supabase 비밀 환경변수가 없어 실행하지 못했습니다(학생이 자기 터미널에서 실행). 배포된 Vercel 서버에서 실제로 403이 나오는지도 확인하지 못했습니다. 위 API 403은 같은 코드를 시험에서 직접 불러 확인한 것입니다.
 

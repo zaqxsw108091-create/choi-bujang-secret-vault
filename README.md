@@ -455,6 +455,19 @@
 - **한계**: 공유 저장소 경로는 코드와 가짜 저장소 시험, 그리고 `sql/xdr-1-block-rules.sql`을 임시 Postgres 엔진(WASM)에서 구역별로 실제 실행한 확인(권한 회수·RLS·덮어쓰기·만료 조회·입력 제한·다시 실행·되돌리기, 2026-10-08)으로 확인했고, 실제 Supabase 표와 배포된 Vercel 서버에서는 학생이 직접 확인했습니다(2026-10-08, 코딩 도구 환경은 외부 접속이 막혀 있어 학생 화면 기준): 표 만들기(SQL [B]) 뒤 권한 표에서 `anon`·`authenticated`는 모두 false·`service_role`은 모두 true, `rls_on`은 true, `link.mjs --db`로 규칙 7개를 올린 뒤 Supabase에서 7줄 확인, Vercel Production(`choi-bujang-secret-vault-tr33`)에 환경변수 `XDR_BLOCK_STORE`(Secret 종류라 저장 뒤에는 값을 볼 수 없음)를 넣어 다시 배포한 뒤 학생 공인 IP로 5분짜리 규칙을 넣고 `/api/notes`를 부르니 `[403, {"error":"BLOCKED_BY_XDR"}]`가 나왔습니다(Vercel 서버에는 규칙 파일이 없으므로 이 403은 공유 저장소 규칙으로 막은 것). 이 시험 뒤 규칙을 지우거나 5분이 지나 실제 서버에서 풀리는 것은 이 기록에 포함하지 않습니다(코드와 시험으로만 확인). 환경변수 `XDR_BLOCK_STORE`를 켜기 전에는 배포 서버에서 이 차단이 작동하지 않고 규칙 파일을 만든 로컬 실행에서만 막습니다. 규칙은 1시간 뒤 만료되어 새 경보를 흘릴 때마다 다시 올려야 하고, 올라온 규칙이 서버에 적용되기까지 최대 30초 걸립니다. 주소는 글자 그대로 비교해서 IPv6 표기가 다르면(축약·대소문자) 못 찾을 수 있습니다(시험 경보의 주소는 모두 IPv4). 운영 반 엔진의 사건 전달·접속 회수도 연결되지 않았습니다. 같은 주소의 경보를 모아 합산하지는 않고 경보 하나의 `count`로 판단합니다. Jev는 실제로 연결하지 못했습니다(응답하는 경우는 가짜 응답으로만 시험, 연결 주소·방법이 저장소에 없음).
 - 제출 묶음 점검 고침(2026-10-08): `npm run bundle`의 직접 점검(`src/attack-check.mjs`)은 배포 주소에 접속하지 못하면 `fetch failed` 오류로 스크립트 전체가 멈췄습니다. 이제 요청을 보내지 못한 점검만 `확인하지 못함 (요청을 보내지 못함)`으로 적고 나머지는 실제 응답대로 적습니다(접속이 될 때의 결과는 이전과 같음). 시험은 `node --test test/attack-check.test.mjs`. 심판의 판정이 아닌 학생의 자기 점검입니다.
 
+## 보너스 xdr-03: 알려진 취약점 악용 잡기 (저장점)
+
+시험 경보(`xdr/fixtures/known-cve.json`, Wazuh 모양 가상 경보 24건)로 연습한 결과입니다. 심판의 판정이 아닙니다. 운영 반 엔진의 사건 전달·접속 회수는 연결되지 않았습니다.
+
+- 지금 작동하는 기능: `xdr/known-cve/decide.mjs`의 `decide(alert)`가 `{ action, confidence, reason }`을 돌려줍니다(import 없음, 파일·네트워크 사용 없음). 요청 머리글·인자에 완전한 원격 조회 구문(`${jndi:ldap://…}` 형태)이 있으면 `block`(0.85 이상), CVE 이름·`jndi` 단어·잘린 조각처럼 닮은 흔적만 있으면 `alert`(0.5~0.75), 신호가 없으면 `record`입니다. 패턴 3개와 근거는 `xdr/known-cve/patterns.json`(근거: CVE-2021-44228, MITRE ATT&CK T1190)에 있고 `decide.mjs` 맨 위 상수와 같습니다.
+- 확인용 읽기: `node xdr/known-cve/read-alerts.mjs`가 시각·출발 주소·계정·수준·설명만 뽑습니다(`decide.mjs`는 이 파일을 부르지 않음).
+- 차단·알림: `node xdr/known-cve/respond.mjs`가 `block` 주소만 1시간 만료 거부 규칙(`xdr/known-cve/block-rules.json`, 근거 경보 번호 포함)으로 만들고, 정상 이벤트에도 나온 주소는 뺍니다. `block`·`alert`는 `xdr/alerts.log`에 한 줄씩 쌓습니다(경보 번호 앞글자 `kc-`). `src/xdr-block.mjs`가 이 규칙 파일도 읽습니다. `src/decider.mjs`는 바꾸지 않았습니다. `block-rules.json`과 `alerts.log`는 Git에 올리지 않습니다.
+- 다시 실행: `npm run xdr:run -- known-cve`가 `xdr/known-cve/result.json`을 만듭니다. 정상 결과는 `counts` = `block` 8 · `alert` 8 · `record` 8이고(kc-01~08 block, kc-09~16 alert, kc-17~24 record), 정상 이벤트(kc-17~24)가 `block`이면 안 됩니다.
+- 쪼갠 표기: `${${lower:j}ndi:…}`, `${${::-j}…}`, `${env:x:-j}` 처럼 글자를 쪼갠 표기는 `decide.mjs`가 `lower`·`upper`·기본값(`:-`) 조회만 풀어 본 뒤, 풀어서 완전한 조회 구문이 되면 같은 패턴으로 `block`(이유 끝에 "쪼갠 표기를 풀어서")하고 아니면 `alert`입니다. 이 풀이는 이 저장소 시험(`test/xdr-known-cve.test.mjs`)에서 쓴 표기 5가지로만 확인했고, 다른 쪼갠 표기까지 모두 잡는다는 뜻은 아닙니다.
+- 패턴 3 근거: 패턴 3(`vuln-scanner-trace-with-lookup`)은 과제가 준 근거(CVE-2021-44228 형태 요청, MITRE ATT&CK T1190)와 신호(알려진 취약점 점검 도구의 흔적)를 그대로 따릅니다. 점검 흔적은 단독으로 `block`하지 않고 같은 경보에 원격 조회 구문이 있을 때 확신도를 더하는 보조 신호입니다. 코딩 도구 환경에서는 외부 사이트에 접속할 수 없어 출처 페이지를 열어 보지는 못했습니다.
+- 시험: `node --test test/xdr-known-cve.test.mjs`(10건: 건수·패턴 일치·import 없음·구분·다른 모양 경보·규칙·로그·로그인/자료 API 403). 전체 `node --test test/*.test.mjs`는 `npm ci`로 패키지를 설치한 뒤 실행했을 때 통과했습니다.
+- 한계: 같은 주소의 경보를 합산하지 않고 경보 하나씩 판단합니다. 배포 서버에서 막으려면 `node xdr/known-cve/respond.mjs --db`가 필요하며, 이 환경에는 Supabase 비밀 환경변수가 없어 실행하지 못했습니다(학생이 자기 터미널에서 실행). 배포된 Vercel 서버에서 실제로 403이 나오는지도 확인하지 못했습니다. 위 API 403은 같은 코드를 시험에서 직접 불러 확인한 것입니다.
+
 ### 10단계 감사 이력 파일 (여섯 번째 제출 전)
 `policy/restore-audit.jsonl`이 저장소에 한 번도 없어서, 저장소를 읽는 쪽에서 "감사 이력이 없다"고 볼 수 있다고 의심했습니다(추측). `npm run policy:restore -- --apply`를 실제로 실행해 "사본 검증, 바뀐 항목 0건" 한 줄(`policy_restore_checked`)을 덧붙이고 파일을 커밋했습니다. 정책 값은 바꾸지 않았고, 이력은 덧붙이기만 합니다. 이 추측이 맞는지는 다시 제출한 결과로만 확인됩니다.
 

@@ -3,10 +3,11 @@
 // 글자를 쪼갠 표기(${lower:j}, ${::-j} 같은 안쪽 조회)는 풀어 본 뒤 완전한 조회 구문이 되면 같은 패턴으로 봅니다. 풀어도 완전한 구문이 아니면 alert 까지만입니다.
 // CVE 이름·'jndi' 단어·점검 도구 비슷한 이름처럼 조회 구문이 없는 흔적은 애매한 시도(alert)로만 남기고, 신호가 없으면 정상(record)입니다.
 //
+// 내보내는 것은 decide(alert) 하나뿐입니다.
 // 심판의 격리 환경에서 이 파일 하나만 실행되므로, 이 파일은 어떤 모듈도 import 하지 않습니다.
 // 파일을 읽거나 쓰지 않고, 바깥에 묻지 않고, 받은 경보만으로 계산합니다. 패턴 값은 patterns.json 과 같게 아래에 적고, 시험이 두 곳이 같은지 확인합니다.
 
-export const PATTERNS = Object.freeze([
+const PATTERNS = Object.freeze([
   {
     "name": "jndi-lookup-in-header",
     "mitre": "T1190",

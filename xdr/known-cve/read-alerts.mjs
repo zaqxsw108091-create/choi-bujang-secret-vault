@@ -22,7 +22,6 @@ export function scrub(text) {
 // 계정(srcuser)은 정상 이벤트에만 있고 CVE 경보에는 없을 수 있어, 없으면 빈 문자열입니다.
 export function extractAlert(alert) {
   return {
-    id: typeof alert?.id === 'string' ? alert.id : '',
     time: scrub(alert?.timestamp),
     srcip: scrub(alert?.data?.srcip),
     user: scrub(alert?.data?.srcuser),
@@ -43,7 +42,7 @@ export async function readAlerts(file = FIXTURE) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { alertCount, rows } = await readAlerts();
   for (const r of rows) {
-    console.log(`${r.id}\t${r.time}\t${r.srcip}\t${r.user}\t수준 ${r.level}\t${r.description}`);
+    console.log(`${r.time}\t${r.srcip}\t${r.user}\t수준 ${r.level}\t${r.description}`);
   }
   console.log(`경보 ${alertCount}건 · 뽑은 줄 ${rows.length}줄 · ${alertCount === rows.length ? '일치' : '불일치'}`);
   if (alertCount !== rows.length) process.exitCode = 1;

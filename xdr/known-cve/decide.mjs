@@ -1,5 +1,6 @@
 // 경보를 패턴과 맞춰 보고 block / alert / record 를 정합니다. 근거는 CVE-2021-44228 형태 요청과 MITRE ATT&CK T1190(외부 공개 앱 악용).
 // 완전한 원격 조회 구문(${jndi:프로토콜://…})이 요청 머리글·인자에 실제로 있는 경보만 명확한 공격(block)으로 봅니다.
+// 글자를 쪼갠 표기(${lower:j}, ${::-j} 같은 안쪽 조회)는 풀어 본 뒤 완전한 조회 구문이 되면 같은 패턴으로 봅니다. 풀어도 완전한 구문이 아니면 alert 까지만입니다.
 // CVE 이름·'jndi' 단어·점검 도구 비슷한 이름처럼 조회 구문이 없는 흔적은 애매한 시도(alert)로만 남기고, 신호가 없으면 정상(record)입니다.
 //
 // 심판의 격리 환경에서 이 파일 하나만 실행되므로, 이 파일은 어떤 모듈도 import 하지 않습니다.
@@ -82,6 +83,21 @@ const HINT_TEXT = /jndi|CVE-\d{4}-\d{4,}|log4(?:j|shell)|log-?library|\$\{|%24%7
 const NESTED_LOOKUP = /\$\{\s*(?:\$\{|[a-z]+:-)/iu;
 const HINT_DESCRIPTION = /원격 조회|조회 (?:구문|형태)|jndi|CVE-\d{4}-\d{4,}|취약점|점검|라이브러리|중괄호/iu;
 
+// 안쪽 조회를 풀어 씁니다: ${lower:x}·${upper:x} 는 글자 하나로, ${…:-x} 는 기본값 x 로 바꿉니다. 더 풀 것이 없을 때까지 최대 5번 반복합니다.
+const LOWER_UPPER = /\$\{\s*(lower|upper)\s*:\s*([^${}]*)\}/giu;
+const DEFAULT_VALUE = /\$\{[^${}]*:-([^${}]*)\}/gu;
+function unwrap(value) {
+  let out = value;
+  for (let i = 0; i < 5; i += 1) {
+    const next = out
+      .replace(LOWER_UPPER, (_, kind, inner) => (kind.toLowerCase() === 'lower' ? inner.toLowerCase() : inner.toUpperCase()))
+      .replace(DEFAULT_VALUE, '$1');
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+}
+
 // 경보 data 안의 문자열을 칸 이름과 함께 모읍니다(깊이·개수 제한).
 function collect(value, key, out, depth) {
   if (out.length >= MAX_VALUES || depth > MAX_DEPTH || value == null) return;
@@ -107,9 +123,16 @@ function judge(alert) {
   const values = [];
   collect(alert?.data, 'data', values, 0);
   collect(alert?.full_log, 'full_log', values, 0);
-  const hit = (regex) => values.some((v) => (v.key !== 'srcip') && regex && (regex.test(v.value) || regex.test(decoded(v.value))));
-  const inHeader = values.some((v) => HEADER_KEY.test(v.key) && HEADER.regex && (HEADER.regex.test(v.value) || HEADER.regex.test(decoded(v.value))));
-  const inArgs = values.some((v) => !HEADER_KEY.test(v.key) && ARGS.regex && (ARGS.regex.test(v.value) || ARGS.regex.test(decoded(v.value))));
+  const hit = (regex) => values.some((v) => regex && (regex.test(v.value) || regex.test(decoded(v.value))));
+  // 원문에서 찾고, 못 찾으면 퍼센트 인코딩과 안쪽 조회를 풀어서 다시 찾습니다.
+  const found = (regex, wantHeader) => values.some((v) => {
+    if (HEADER_KEY.test(v.key) !== wantHeader || !regex) return false;
+    const plain = decoded(v.value);
+    return regex.test(v.value) || regex.test(plain) || regex.test(unwrap(v.value)) || regex.test(unwrap(plain));
+  });
+  const inHeader = found(HEADER.regex, true);
+  const inArgs = found(ARGS.regex, false);
+  const unwrapped = values.some((v) => !HEADER.regex.test(decoded(v.value)) && (HEADER.regex.test(unwrap(decoded(v.value)))));
 
   // 명확한 공격: 요청 머리글·인자에 완전한 원격 조회 구문이 실제로 있음.
   if (inHeader || inArgs) {
@@ -122,7 +145,7 @@ function judge(alert) {
     if (SCANNER.description?.test(description)) { confidence += 0.03; names.push(SCANNER.name); }
     if (level >= 12) confidence += 0.02;
     confidence = Math.min(0.99, Math.round(confidence * 100) / 100);
-    return { action: toAction(confidence), confidence, reason: `패턴 일치: ${names.join(', ')}` };
+    return { action: toAction(confidence), confidence, reason: `패턴 일치: ${names.join(', ')}${unwrapped ? ' (쪼갠 표기를 풀어서)' : ''}` };
   }
 
   // 애매한 시도: 조회 구문은 없지만 닮은 흔적(CVE 이름·jndi 단어·잘린 조각·점검 비슷한 설명)이 있음.

@@ -10,12 +10,12 @@ const PATTERNS = Object.freeze([
   {
     "name": "admin-group-added",
     "mitre": "T1078",
-    "condition": "경보 설명에 관리자 그룹에 추가됐다·들어갔다·다시 들어왔다는 내용이 있다. 관리자가 아닌 그룹(과제 그룹 등)에 추가된 경우, 그룹 목록·소속을 읽기만 한 경우, 새 로컬 그룹이 만들어진 경우는 해당하지 않는다",
+    "condition": "경보 설명에 관리자 그룹에 추가됐다·들어갔다·다시 들어왔다는 내용이 있다. 관리자가 아닌 그룹(과제 그룹 등)에 추가된 경우, 그룹 목록·소속을 읽기만 한 경우, 새 로컬 그룹이 만들어진 경우는 해당하지 않는다. 추가되지 않았다·없다처럼 부정하는 문장도 해당하지 않는다",
     "match": {
       "target": "ruleDescription",
       "all": [
         {
-          "regex": "관리자 그룹(?:에|으로)? ?(?:추가|들어)|관리자로 들어"
+          "regex": "(?:관리자|[Aa]dministrators) 그룹(?: 추가|(?:에|으로)[^.]{0,20}?(?:추가|들어))|관리자로 들어"
         }
       ]
     },
@@ -24,7 +24,7 @@ const PATTERNS = Object.freeze([
   {
     "name": "unfamiliar-admin-command",
     "mitre": "T1068",
-    "condition": "경보 설명에 관리자 명령 실행(또는 세션이 관리자 권한으로 바뀜)이 있고, 처음 보는 주소다·방금 관리자가 됐다·다른 계정의 권한을 썼다 중 하나가 함께 있다. 평소 주소에서 한 번 실행된 경우, 실패 1건으로 끝난 경우, 권한 상승 창이 떴다가 취소된 경우는 해당하지 않는다",
+    "condition": "경보 설명에 관리자 명령 실행(또는 세션이 관리자 권한으로 바뀜)이 있고, 처음 보는 주소다·방금 관리자가 됐다·다른 계정의 권한을 썼다 중 하나가 함께 있다. 평소 주소에서 한 번 실행된 경우, 실패 1건으로 끝난 경우, 권한 상승 창이 떴다가 취소된 경우는 해당하지 않는다. 차단돼 실행되지 않았다처럼 부정하는 문장도 해당하지 않는다",
     "match": {
       "target": "ruleDescription",
       "all": [
@@ -78,6 +78,8 @@ const matches = (compiled, description) => compiled.parts.every((regex) => regex
 
 // 패턴 조건은 못 채웠어도 관리자·권한·그룹 흔적이 있는 설명입니다. 판단은 alert 까지만 올리고 block 은 만들지 않습니다.
 const TRACE = /관리자|권한|그룹|상승|계정 종류/u;
+// 추가되지 않았다·없다·실패·취소처럼 부정하는 문장은 패턴 단어가 있어도 공격이 아닙니다. 패턴 일치로 세지 않고 흔적(alert 이하)으로만 봅니다.
+const NEGATED = /않았|않습니다|없습니다|못했|아닙니다|차단되|취소됐|취소되었|실패/u;
 // 읽기만 한 기록은 평소 모습입니다. 수준이 낮을 때만 확신도를 내립니다.
 const READ_ONLY = /읽기만|조회했/u;
 
@@ -92,7 +94,7 @@ function judge(alert) {
   const repeats = readRepeats(alert);
 
   // 명확한 공격: 패턴 조건을 모두 채움.
-  const hits = COMPILED.filter((compiled) => matches(compiled, description)).map((compiled) => compiled.name);
+  const hits = NEGATED.test(description) ? [] : COMPILED.filter((compiled) => matches(compiled, description)).map((compiled) => compiled.name);
   if (hits.length) {
     let confidence = 0.88;
     if (hits.length >= 2) confidence += 0.04;

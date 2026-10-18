@@ -112,3 +112,14 @@ test('ZTNA 거부 규칙 읽기: 기본 경로가 privilege 규칙 파일도 읽
   assert.equal(findBlock([probe], '198.51.100.251', NOW + 3600001), null);
   assert.equal(findBlock([probe], '198.51.100.252', NOW), null);
 });
+
+test('decide: 표현을 바꾼 경보도 같은 답이고, 부정하는 문장은 막지 않는다', () => {
+  const ask = (level, description) => decide({ id: 'x', rule: { level, description }, data: { srcip: '192.0.2.1', srcuser: 'u' } }).action;
+  assert.equal(ask(12, 'Administrators 그룹에 user09 계정이 추가되었습니다.'), 'block');
+  assert.equal(ask(11, '처음 보는 주소에서 관리자 명령이 실행됐습니다.'), 'block');
+  assert.equal(ask(11, '업무처럼 보이지 않는 시각에 관리자 그룹 추가와 명령 실행이 같이 있습니다.'), 'block');
+  for (const text of ['관리자 그룹에 추가된 계정이 없습니다.', 'user02 가 관리자 그룹에 추가되지 않았습니다.', '관리자 명령이 처음 보는 주소에서 차단되어 실행되지 않았습니다.']) {
+    assert.notEqual(ask(3, text), 'block', text);
+  }
+  assert.equal(ask(3, '관리자 그룹 목록을 읽기만 했습니다.'), 'record');
+});

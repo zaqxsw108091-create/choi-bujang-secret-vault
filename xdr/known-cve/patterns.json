@@ -1,0 +1,42 @@
+{
+  "schema": "aleph.xdr.patterns.v1",
+  "moduleKey": "known-cve",
+  "source": "CVE-2021-44228 (Log4Shell) 형태 요청, MITRE ATT&CK T1190 Exploit Public-Facing Application",
+  "patterns": [
+    {
+      "name": "jndi-lookup-in-header",
+      "mitre": "T1190",
+      "condition": "요청 머리글(User-Agent 등)에 완전한 원격 조회 구문 ${jndi:프로토콜://주소/…} 이 들어 있다. 'jndi'라는 단어만 있거나 중괄호·조회 조각만 있는 경우는 해당하지 않는다",
+      "match": {
+        "target": "requestHeaders",
+        "regex": "\\$\\{\\s*jndi\\s*:\\s*(?:ldaps?|rmi|dns)://[^}\\s]+\\}",
+        "flags": "i"
+      },
+      "evidence": "근거: CVE-2021-44228(NIST NVD) — 기록되는 머리글의 ${jndi:…} 조회가 외부 코드를 불러오는 공개 취약점. MITRE ATT&CK T1190(외부 공개 앱 악용)."
+    },
+    {
+      "name": "jndi-lookup-in-request-args",
+      "mitre": "T1190",
+      "condition": "요청 주소·인자(쿼리 값)에 완전한 원격 조회 구문 ${jndi:프로토콜://주소/…} 이 들어 있다. 'CVE-2021-44228' 같은 글자만 검색어에 있거나 'jndi' 단어만 있는 경우는 해당하지 않는다",
+      "match": {
+        "target": "requestArgs",
+        "regex": "\\$\\{\\s*jndi\\s*:\\s*(?:ldaps?|rmi|dns)://[^}\\s]+\\}",
+        "flags": "i"
+      },
+      "evidence": "근거: CVE-2021-44228(NIST NVD) — 요청 인자가 기록될 때 ${jndi:…} 조회가 실행되는 공개 취약점. MITRE ATT&CK T1190(외부 공개 앱 악용)."
+    },
+    {
+      "name": "vuln-scanner-trace-with-lookup",
+      "mitre": "T1190",
+      "condition": "경보 설명이 알려진 취약점 점검 도구의 흔적을 가리키고, 같은 경보의 머리글·인자에도 완전한 원격 조회 구문이 있다. 점검 도구와 비슷한 이름만 있고 조회 구문이 없으면 해당하지 않는다(점검 흔적은 단독 근거가 아니라 확신도를 더하는 보조 신호)",
+      "match": {
+        "target": "description+requestArgs+requestHeaders",
+        "descriptionRegex": "점검\\s*(?:도구\\s*)?흔적",
+        "regex": "\\$\\{\\s*jndi\\s*:\\s*(?:ldaps?|rmi|dns)://[^}\\s]+\\}",
+        "flags": "i",
+        "requires": "descriptionRegex+regex"
+      },
+      "evidence": "근거: 과제 안내문이 든 신호(알려진 취약점 점검 도구의 흔적)와 CVE-2021-44228 형태 요청의 동시 출현. MITRE ATT&CK T1190(외부 공개 앱 악용)."
+    }
+  ]
+}

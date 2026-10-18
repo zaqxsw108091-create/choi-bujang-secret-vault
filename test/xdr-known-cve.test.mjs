@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import { createAuthApi } from '../src/auth-api.mjs';
 import { createNotesApi } from '../src/notes-api.mjs';
 import { KNOWN_CVE_RULES_FILE, findBlock, loadBlockRules } from '../src/xdr-block.mjs';
-import { PATTERNS, decide } from '../xdr/known-cve/decide.mjs';
+import * as decideModule from '../xdr/known-cve/decide.mjs';
+import { decide } from '../xdr/known-cve/decide.mjs';
 import { alertLine, buildBlockRules, decideAll, respond } from '../xdr/known-cve/respond.mjs';
 import { readAlerts, scrub } from '../xdr/known-cve/read-alerts.mjs';
 
@@ -28,7 +29,7 @@ test('경보 건수와 뽑은 줄 수가 같고, 비밀값처럼 보이는 값�
   const { alertCount, rows } = await readAlerts();
   assert.equal(alertCount, 24);
   assert.equal(rows.length, alertCount);
-  assert.ok(rows.every((r) => !('url' in r) && !('useragent' in r)));
+  assert.ok(rows.every((r) => JSON.stringify(Object.keys(r)) === JSON.stringify(['time', 'srcip', 'user', 'level', 'description'])));
   assert.equal(scrub('password=abc12345 and sb_secret_abcdefghijklmnop'), '[가림] and [가림]');
 });
 
@@ -39,7 +40,11 @@ test('패턴마다 이름·찾는 조건·근거 한 줄이 있고, decide.mjs �
     assert.match(p.evidence, /^근거: .+/u);
     assert.ok(!p.evidence.includes('\n'));
   }
-  assert.deepEqual(JSON.parse(JSON.stringify(PATTERNS)), patternsFile.patterns);
+  // PATTERNS 는 내보내지 않으므로 파일 맨 위 상수를 글자로 읽어 patterns.json 과 비교합니다.
+  const literal = /const PATTERNS = Object\.freeze\((\[[\s\S]*?\n\])\);/u.exec(decideSource)?.[1];
+  assert.ok(literal);
+  assert.deepEqual(JSON.parse(literal), patternsFile.patterns);
+  assert.deepEqual(Object.keys(decideModule), ['decide']);
 });
 
 test('decide.mjs 는 import 문도 파일·네트워크 사용도 없고, 한 파일만 따로 불러와도 답한다', async () => {

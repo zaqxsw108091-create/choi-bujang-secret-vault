@@ -468,6 +468,17 @@
 - 시험: `node --test test/xdr-known-cve.test.mjs`(10건: 건수·패턴 일치·import 없음·구분·다른 모양 경보·규칙·로그·로그인/자료 API 403). 전체 `node --test test/*.test.mjs`는 `npm ci`로 패키지를 설치한 뒤 실행했을 때 통과했습니다.
 - 한계: 같은 주소의 경보를 합산하지 않고 경보 하나씩 판단합니다. 배포 서버에서 막으려면 `node xdr/known-cve/respond.mjs --db`가 필요하며, 이 환경에는 Supabase 비밀 환경변수가 없어 실행하지 못했습니다(학생이 자기 터미널에서 실행). 배포된 Vercel 서버에서 실제로 403이 나오는지도 확인하지 못했습니다. 위 API 403은 같은 코드를 시험에서 직접 불러 확인한 것입니다.
 
+## 보너스 xdr-04: 몰래 심어진 프로그램 찾기 (저장점)
+
+시험 경보(`xdr/fixtures/persistence.json`, Wazuh 모양 가상 경보 24건)로 연습한 결과입니다. 심판의 판정이 아닙니다. 운영 반 엔진의 사건 전달·접속 회수는 연결되지 않았습니다.
+
+- 지금 작동하는 기능: `xdr/persistence/decide.mjs`의 `decide(alert)`가 `{ action, confidence, reason }`을 돌려줍니다(import 없음, 파일·네트워크 사용 없음). 경보 설명이 패턴 조건을 모두 채우면 `block`(0.85 이상), 서비스·예약 작업·시작 항목·임시 폴더 흔적만 있으면 `alert`(0.5~0.75), 흔적이 없거나 서명된 서비스·읽기만 한 기록처럼 평소 모습이면 `record`입니다. 패턴 3개(`unsigned-new-service` T1543, `unfamiliar-scheduled-task` T1053, `startup-folder-change` T1547.001)와 근거는 `xdr/persistence/patterns.json`에 있고 `decide.mjs` 맨 위 상수와 같습니다. 시작 폴더 패턴만 과제가 준 두 번호 밖의 번호(T1547.001)를 썼습니다.
+- 확인용 읽기: `node xdr/persistence/read-alerts.mjs`가 시각·출발 주소·계정·수준·설명만 뽑습니다(`decide.mjs`는 이 파일을 부르지 않음).
+- 차단·알림: `node xdr/persistence/respond.mjs`가 `block` 주소만 1시간 만료 거부 규칙(`xdr/persistence/block-rules.json`, 근거 경보 번호 포함)으로 만들고, 정상 이벤트에도 나온 주소는 뺍니다. `block`·`alert`는 `xdr/alerts.log`에 한 줄씩 쌓습니다(경보 번호 앞글자 `ps-`). `src/xdr-block.mjs`가 이 규칙 파일도 읽습니다. `src/decider.mjs`는 바꾸지 않았습니다. `block-rules.json`과 `alerts.log`는 Git에 올리지 않습니다.
+- 다시 실행: `npm run xdr:run -- persistence`가 `xdr/persistence/result.json`을 만듭니다. 정상 결과는 `counts` = `block` 8 · `alert` 8 · `record` 8이고(ps-01~08 block, ps-09~16 alert, ps-17~24 record), 정상 이벤트(ps-17~24)가 `block`이면 안 됩니다.
+- 시험: `node --test test/xdr-persistence.test.mjs`(5건). 시험 전에 `npm ci`가 필요합니다.
+- 한계: 패턴 조건은 경보 설명 문장만 봅니다(`data.path`는 확신도에만 반영). 같은 주소의 경보를 합산하지 않고 경보 하나씩 판단합니다. `respond.mjs --db`(공유 저장소 올리기)와 배포된 Vercel 서버의 실제 403은 실행·확인하지 못했습니다. API 403은 같은 코드를 시험에서 직접 불러 확인한 것입니다.
+
 ### 10단계 감사 이력 파일 (여섯 번째 제출 전)
 `policy/restore-audit.jsonl`이 저장소에 한 번도 없어서, 저장소를 읽는 쪽에서 "감사 이력이 없다"고 볼 수 있다고 의심했습니다(추측). `npm run policy:restore -- --apply`를 실제로 실행해 "사본 검증, 바뀐 항목 0건" 한 줄(`policy_restore_checked`)을 덧붙이고 파일을 커밋했습니다. 정책 값은 바꾸지 않았고, 이력은 덧붙이기만 합니다. 이 추측이 맞는지는 다시 제출한 결과로만 확인됩니다.
 
@@ -549,7 +560,7 @@
 | **ALEPH SDP 엔진(제공, 이 저장소에 코드 없음)** | 요청의 신원·기기·경로를 확인한 뒤 `aleph.decision.v1` 계약으로 판정기를 부르고, 검증한 사건을 전달하며, 접속 회수를 집행하는 운영 쪽 엔진 | 출처: ALEPH SDP 엔진(운영 측). 이 저장소에서는 계약 문서 [`docs/DECIDER_REQUEST.md`](docs/DECIDER_REQUEST.md)·[`docs/DETECT_EVENTS.md`](docs/DETECT_EVENTS.md)로만 알 수 있고, **엔진과 이 서버가 실제로 연결됐다는 것은 확인하지 못했습니다.** 이 서버의 기기 승인(`devices` 표)은 엔진이 전달하는 `deviceRegistered`와 다른 장치입니다 |
 | 시작 틀(제공, 이후 수정 없음 — `git log`에 시작 틀 병합 커밋 `917753a` 하나뿐) | `src/verify-login.mjs`(로그인 토큰 검사), `scripts/bundle.mjs`(제출 묶음), `scripts/decider-test.mjs`·`scripts/detect-test.mjs`(가상 연습), `package/*` 안내문, `xdr/fixtures/*`(수업용 가상 경보) | 시작 틀 `BYTE BACK 방어전 시작 틀 R5` |
 | 시작 틀에서 출발해 학생이 고침 | `scripts/build-public.mjs`, `scripts/deployment-identity.mjs`, `src/attack-check.mjs`, `scripts/xdr-run.mjs`, `src/decider.mjs`·`src/detect.mjs`(빈 틀을 채움) | 시작 틀 + 학생 |
-| **학생 몫** | **판정기 규칙 5개**(`src/decider.mjs`), **탐지 규칙 `burst_read`**(`src/detect.mjs`), **접속 앱**(`public/index.html`, `public/manifest.webmanifest`, 기기 서명 `src/device-gate.mjs`), **자료실 서버**(`api/*.js`, `src/notes-api.mjs`, `src/auth-api.mjs`, `src/note-restore.mjs`, `src/policy-*.mjs`, `src/ops-summary.mjs`, `src/xdr-*.mjs`), XDR 보너스 판단 `xdr/brute-force/`·`xdr/web-injection/`, 회귀표 `src/regression-table.mjs`, SQL `sql/*.sql` | 학생(코딩 도구의 도움으로 작성, 학생이 검토·실행) |
+| **학생 몫** | **판정기 규칙 5개**(`src/decider.mjs`), **탐지 규칙 `burst_read`**(`src/detect.mjs`), **접속 앱**(`public/index.html`, `public/manifest.webmanifest`, 기기 서명 `src/device-gate.mjs`), **자료실 서버**(`api/*.js`, `src/notes-api.mjs`, `src/auth-api.mjs`, `src/note-restore.mjs`, `src/policy-*.mjs`, `src/ops-summary.mjs`, `src/xdr-*.mjs`), XDR 보너스 판단 `xdr/brute-force/`·`xdr/web-injection/`·`xdr/known-cve/`·`xdr/persistence/`, 회귀표 `src/regression-table.mjs`, SQL `sql/*.sql` | 학생(코딩 도구의 도움으로 작성, 학생이 검토·실행) |
 
 `src/decider.mjs`가 읽는 값은 계약에 있는 이름뿐이고(`request.deviceRegistered`, `request.stepUp`, `request.signals` 등), 계약에 없는 `request.device`·`request.identity`·`request.geo`·`request.role`은 쓰지 않습니다.
 

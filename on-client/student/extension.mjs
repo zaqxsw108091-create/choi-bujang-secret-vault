@@ -16,9 +16,10 @@ function make(tag, text, className) {
 
 const isObject = (value) => value !== null && typeof value === 'object';
 
-// 목록에 없는 상태값은 정상으로 추측하지 않고 확인 불가로 둔다.
+// 한국어 설명 옆에 전달받은 상태 코드를 그대로 붙인다. 목록에 없는 값은 정상으로 추측하지 않고 확인 불가로 둔다.
 function statusText(labels, status) {
-  return Object.hasOwn(labels, status) ? labels[status] : labels.unknown;
+  const text = Object.hasOwn(labels, status) ? labels[status] : labels.unknown;
+  return `${text}(${String(status ?? '없음')})`;
 }
 
 // 기준 충족·활성이 아닌 상태는 글자 앞에 '주의'를 붙이고 오류 모양으로 그린다. 색에만 의존하지 않는다.

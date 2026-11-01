@@ -14,7 +14,7 @@
 | Node.js | 22~24 (수업 기준 24.19.0) | 수업용 AI 작업 환경(Linux): v22.23.4. 내 Windows PC: **v24.15.0** (실행 도구가 `참고: 지금 Node.js 는 v24.15.0 입니다. 수업 기준은 v24.19.0 입니다.`라고 알림. 22~24 범위라 실행은 막히지 않음) | 요구 버전은 `on-client/package.json`의 `engines`와 `on-client/tools/start-alekov.ps1`에서 읽음. 내 PC 값은 PowerShell에서 `node --version`으로 확인해 이 칸에 적습니다 |
 | npm | Node.js에 포함 | 수업용 AI 작업 환경: 10.9.9 | `npm --version` |
 | Windows PowerShell | 실행 도구(`start-alekov.ps1`)용 | 내 Windows PC의 Windows PowerShell에서 실행 도구가 켜짐(6-3). 버전 번호는 확인하지 않음 | |
-| 브라우저 | 주소 `http://127.0.0.1:5189/`를 열 수 있는 것 | 수업용 AI 작업 환경의 Chromium(자동 조작)으로 화면을 열어 봄. 내 PC 브라우저: **확인 필요** | |
+| 브라우저 | 주소 `http://127.0.0.1:5189/`를 열 수 있는 것 | 수업용 AI 작업 환경의 Chromium(자동 조작)으로 화면을 열어 봄. 내 Windows PC: Microsoft Edge로 열림(2026-11-01, 새 폴더 `0.2.14`와 원래 폴더 `0.2.21` 모두) | |
 
 외부 npm 의존성은 없습니다(`on-client/package.json`에 `dependencies`가 없음). 그래서 `npm install`이 필요 없습니다.
 
@@ -208,13 +208,14 @@ flowchart LR
 | `renderIdentity`, `renderStatus`, `renderAiConnection`, `renderVulnerabilities`의 실패·준비 상태 표시 | 실제 확인 | 예제 자료와 연결 없음 상태에서만 |
 | `renderDecision`, `renderEvents`, `renderExplanation`, `renderAction`의 정상 경로 | 기다림(UNV): 코드로만 읽음 | 화면에서 버튼을 눌러 확인하지 않음 |
 | PowerShell 실행 도구 `start-alekov.ps1` | 실제 확인(내 PC, `0.2.21`) | 켜짐 신호와 화면 열림까지만. 종료(Ctrl+C)와 재실행은 아직 확인하지 않음 |
-| 내 PC 종료·재실행, `npm start`·`npm run demo`·`npm run check` | 기다림(UNV) | 내 PC에서는 실행 도구로 켜는 것만 확인함 |
+| 종료(Ctrl+C)·재실행(실행 도구) | 실제 확인(내 Windows PC, 새 폴더 `0.2.14`, Node.js `v24.15.0`, 2026-11-01) | 종료 뒤 브라우저가 `ERR_CONNECTION_REFUSED`, 재실행 뒤 `연결 없음` 화면이 다시 열림. `docs/REPRODUCTION_RECORD_22.md` 3장 |
+| 원래 폴더 `0.2.21`의 종료·재실행, `npm start`·`npm run demo`·`npm run check` | 기다림(UNV) | 하지 않음 |
 | 계정 연결, AI 앱 승인, AI 연결 점검 성공 | 기다림(UNV) | 실패(권한 준비 중) 화면만 확인함. 성공은 보지 못함 |
 | AI 사건 설명 | 기다림(UNV) | 연결 성공 전에는 실행할 수 없음 |
 | 실제 기존 접속·XDR 서버(SDP) 연결, 업무 앱 접속 판정, 실제 보안 기록 | 기다림(UNV) | 담당자 안내와 비공개 설정이 필요하며 사용하지 않음 |
 | 조치 실행(`renderAction`의 집행) | 기다림(UNV) | 사용하지 않음. 서버 처리 결과를 보지 못함 |
 | OSV 실제 조회 결과(알려진 항목 있음·없음) | 기다림(UNV) | 허용 목록이 비어 `not_configured`만 확인함 |
-| 새 폴더에서의 처음부터 재설치·실행(22단계) | 미확인 | 21단계에서는 하지 않았고, 결과는 `docs/REPRODUCTION_RECORD_22.md` 3장에 학생이 불러 준 값만 적음 |
+| 새 폴더에서 같은 커밋 받기·실행·종료·재실행(22단계) | 실제 확인(커밋 `ffaff3c3548c74a0af2fe55f77e24a220ed34ee7`, 앱 `0.2.14`) | 최종 제출 커밋은 이 기록을 담은 더 새로운 커밋이라 그 커밋으로의 재현은 미확인. 자세한 값은 `docs/REPRODUCTION_RECORD_22.md` 3장 |
 
 ### 6-3. 시작 틀 0.2.14와 0.2.21의 차이 (내 PC 화면에서 확인한 것만)
 
@@ -233,4 +234,4 @@ flowchart LR
 
 ### 6-4. 22단계 재현 기록과의 관계
 
-새 폴더에서 같은 커밋을 받아 실행한 기록은 [docs/REPRODUCTION_RECORD_22.md](REPRODUCTION_RECORD_22.md)에 따로 둡니다. 그 문서와 이 문서, `README.md`의 확인 상태(확인함/미확인/기다림(UNV))는 같습니다. 22단계 기록을 쓰는 시점에 새로 직접 확인한 항목은 없어서 6-2의 상태는 위 한 줄(새 폴더 재설치: 미확인)만 바뀌었습니다. 앱 버전은 커밋 기준 `0.2.14`, 내 PC 작업 폴더는 저장하지 않은 `0.2.21`이며 새 폴더에서 본 버전은 아직 없습니다. 현재 상태는 검증 중인 버전입니다.
+새 폴더에서 같은 커밋을 받아 실행한 기록은 [docs/REPRODUCTION_RECORD_22.md](REPRODUCTION_RECORD_22.md)에 따로 둡니다. 그 문서와 이 문서, `README.md`의 확인 상태(확인함/미확인/기다림(UNV))는 같습니다. 2026-11-01에 학생이 새 폴더(Windows PC, Node.js `v24.15.0`, 앱 `0.2.14`)에서 직접 확인한 항목(켜기·화면 열기·종료·재실행·새 폴더 커밋 값)은 6-2에서 「실제 확인」으로 바꿨습니다. 내 PC 원래 폴더는 저장하지 않은 `0.2.21`이라 새 폴더와 **버전이 다릅니다.** 새 폴더 결과를 `0.2.21`의 결과로 쓰지 않습니다. 현재 상태는 검증 중인 버전입니다.

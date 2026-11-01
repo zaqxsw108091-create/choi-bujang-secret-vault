@@ -11,9 +11,9 @@
 
 | 프로그램 | 요구 버전 | 확인한 버전 | 근거 |
 |---|---|---|---|
-| Node.js | 22~24 (수업 기준 24.19.0) | 수업용 AI 작업 환경(Linux): v22.23.4. **내 Windows PC: 확인 필요** | 요구 버전은 `on-client/package.json`의 `engines`와 `on-client/tools/start-alekov.ps1`에서 읽음. 내 PC 값은 PowerShell에서 `node --version`으로 확인해 이 칸에 적습니다 |
+| Node.js | 22~24 (수업 기준 24.19.0) | 수업용 AI 작업 환경(Linux): v22.23.4. 내 Windows PC: **v24.15.0** (실행 도구가 `참고: 지금 Node.js 는 v24.15.0 입니다. 수업 기준은 v24.19.0 입니다.`라고 알림. 22~24 범위라 실행은 막히지 않음) | 요구 버전은 `on-client/package.json`의 `engines`와 `on-client/tools/start-alekov.ps1`에서 읽음. 내 PC 값은 PowerShell에서 `node --version`으로 확인해 이 칸에 적습니다 |
 | npm | Node.js에 포함 | 수업용 AI 작업 환경: 10.9.9 | `npm --version` |
-| Windows PowerShell | 실행 도구(`start-alekov.ps1`)용 | **미확인** (수업용 AI 작업 환경에 PowerShell이 없음) | |
+| Windows PowerShell | 실행 도구(`start-alekov.ps1`)용 | 내 Windows PC의 Windows PowerShell에서 실행 도구가 켜짐(6-3). 버전 번호는 확인하지 않음 | |
 | 브라우저 | 주소 `http://127.0.0.1:5189/`를 열 수 있는 것 | 수업용 AI 작업 환경의 Chromium(자동 조작)으로 화면을 열어 봄. 내 PC 브라우저: **확인 필요** | |
 
 외부 npm 의존성은 없습니다(`on-client/package.json`에 `dependencies`가 없음). 그래서 `npm install`이 필요 없습니다.
@@ -48,7 +48,7 @@ choi-bujang-secret-vault/          ← Git 최상위 (커밋·제출 기준)
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1
 ```
 
-- 정상 시작 신호(코드로만 읽음, 실행하지 않음): 창에 `케셰브가 켜졌습니다. 브라우저에서 http://127.0.0.1:5189/ 을 여세요.`와 `서버가 응답한 것만 확인했습니다. AI 연결 상태는 화면에서 따로 확인해 주세요.`가 나옵니다. 이 두 줄은 서버가 응답했다는 뜻이며 AI 연결이 됐다는 뜻이 아닙니다.
+- 정상 시작 신호(내 PC에서 `0.2.21` 도구로 실제 확인, 6-3): 창에 `케셰브가 켜졌습니다. 브라우저에서 http://127.0.0.1:5189/ 을 여세요.`와 `서버가 응답한 것만 확인했습니다. AI 연결 상태는 화면에서 따로 확인해 주세요.`가 나옵니다. `0.2.21`에서는 그 앞에 `계정 연결 준비가 끝났습니다. 앱에서 확인 번호로 로그인·승인을 진행하세요.`와 `케셰브 연결 확인: http://127.0.0.1:5189`도 나오고, 끝에 `끄려면 이 창에서 Ctrl+C 를 누르세요.`가 나옵니다. 이 줄들은 서버가 응답했다는 뜻이며 AI 연결이 됐다는 뜻이 아닙니다.
 - 실행 도구는 시작 전에 Node.js 버전, 폴더 구성, 포트 사용 여부를 확인합니다. 문제가 있으면 5장 표의 메시지가 나옵니다.
 
 ### 3-2. 실행 (대체: npm 명령)
@@ -207,8 +207,8 @@ flowchart LR
 | 서버 켜짐과 화면 열림(예제·기본 실행) | 실제 확인 | 수업용 AI 작업 환경에서만 |
 | `renderIdentity`, `renderStatus`, `renderAiConnection`, `renderVulnerabilities`의 실패·준비 상태 표시 | 실제 확인 | 예제 자료와 연결 없음 상태에서만 |
 | `renderDecision`, `renderEvents`, `renderExplanation`, `renderAction`의 정상 경로 | 기다림(UNV): 코드로만 읽음 | 화면에서 버튼을 눌러 확인하지 않음 |
-| PowerShell 실행 도구 `start-alekov.ps1` | 기다림(UNV): 코드로만 읽음 | 수업용 AI 작업 환경에 PowerShell이 없어 실행하지 못함 |
-| 내 Windows PC의 Node.js 버전과 실행 | 기다림(UNV) | 내 PC에서 `node --version`과 3장 순서로 확인해 적습니다 |
+| PowerShell 실행 도구 `start-alekov.ps1` | 실제 확인(내 PC, `0.2.21`) | 켜짐 신호와 화면 열림까지만. 종료(Ctrl+C)와 재실행은 아직 확인하지 않음 |
+| 내 PC 종료·재실행, `npm start`·`npm run demo`·`npm run check` | 기다림(UNV) | 내 PC에서는 실행 도구로 켜는 것만 확인함 |
 | 계정 연결, AI 앱 승인, AI 연결 점검 성공 | 기다림(UNV) | 실패(권한 준비 중) 화면만 확인함. 성공은 보지 못함 |
 | AI 사건 설명 | 기다림(UNV) | 연결 성공 전에는 실행할 수 없음 |
 | 실제 기존 접속·XDR 서버(SDP) 연결, 업무 앱 접속 판정, 실제 보안 기록 | 기다림(UNV) | 담당자 안내와 비공개 설정이 필요하며 사용하지 않음 |
@@ -218,12 +218,14 @@ flowchart LR
 
 ### 6-3. 시작 틀 0.2.14와 0.2.21의 차이 (내 PC 화면에서 확인한 것만)
 
-내 Windows PC에서 PowerShell로 직접 확인한 값입니다(2026-11-01).
+내 Windows PC에서 직접 확인한 값입니다(2026-11-01). 실행 도구를 켠 PowerShell 화면에는 위 시작 신호 줄과 함께 `참고: 지금 Node.js 는 v24.15.0 입니다…`가 나왔습니다.
 
 | 확인 | 결과 |
 |---|---|
 | `git diff package.json` | `version`이 `0.2.14`에서 `0.2.21`로 바뀜. `scripts`에 `"package-app": "node tools/package-app.mjs"`가 추가됨. `start`, `demo`, `check` 명령은 그대로. `engines.node`는 `24.19.0` 그대로 |
 | `tools/start-alekov.ps1`에서 찾은 줄 | 기본 포트 `5189`, 기다리는 시간 기본 `20`초(1~120), Node.js 22~24 확인과 24.19.0 권장 안내, 켜짐 신호 `케셰브가 켜졌습니다. 브라우저에서 $url 을 여세요.`와 `서버가 응답한 것만 확인했습니다. AI 연결 상태는 화면에서 따로 확인해 주세요.`. 3장에 쓴 내용과 같음 |
+| 내 PC에서 브라우저로 `http://127.0.0.1:5189/` 열기(`0.2.21`) | 위쪽 표시 `연결 없음`. 탭 `보호 현황`·`업무 앱`·`보안 기록`. 빨간 안내 칸에 `로그인 정보`·`업무 앱`·`보안 기록`·`기기`·`세션`이 각각 `기존 서버·에이전트의 연결을 확인할 수 없습니다. 연결 어댑터를 먼저 확인하세요.`로 나옴. `0.2.14`에는 없던 `내 PC 상태`(제공) 칸이 새로 있고 「내 PC 확인」 버튼, `10초마다 확인(앱 탭이 보이는 동안)` 체크 상자, `아직 조회하지 않았습니다.`, CPU·메모리·디스크·네트워크·Windows 방화벽·Windows 기록이 각각 `아직 조회하지 않음`으로 보임. 이 칸의 버튼은 누르지 않았음 |
+| 같은 화면의 `학생 구현 표시 student/extension.mjs · renderIdentity` 칸 | 칸 제목이 보임. 칸 안의 내용은 아래로 스크롤하지 않아 읽지 않음 |
 
 `0.2.21`에 새로 생긴 `examples/`, `tools/package-app.mjs`, `tools/install-packaged-app.ps1`, `src/pc-status.mjs`, `public/pc-status-view.mjs`와 바뀐 `public/app.js`, `src/server.mjs` 등은 **읽지도 실행하지도 않았습니다(미확인)**. 그래서 이 문서의 구성도·함수 표·화면 문구는 `0.2.14` 코드 기준이며, `0.2.21`에서 다른 점이 있는지는 확인하지 않았습니다. `npm run package-app`은 사용하지 않았고 설명하지 않습니다.
 

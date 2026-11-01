@@ -814,11 +814,11 @@ const ACTION_LINES = {
   loading: ['조치 준비 또는 결과 조회 중(loading)', '서버 응답을 기다리는 중이며 결과가 아직 확인되지 않았습니다.'],
   prepared: ['준비됨·미실행(prepared)', '조치는 준비만 되었고 실행되지 않았습니다. 확인 기한 안에 제공 화면에서 대상과 조치를 확인해야 서버로 전달됩니다.'],
   executing: ['서버에 전달 중(executing)', '결과가 아직 확인되지 않았습니다. 서버 응답과 효과 확인을 기다리세요.'],
-  pending: ['서버 접수·처리 중(pending)', '서버가 요청을 받았다는 접수 응답(ACK)은 효과 확인이 아닙니다. 결과가 아직 확인되지 않았습니다. 제공 화면의 「연동 시스템 결과만 재조회」로 서버 결과를 다시 조회하세요.'],
+  pending: ['서버 접수·처리 중(pending)', '서버가 요청을 받았다는 접수 응답(ACK)은 효과 확인이 아닙니다. 결과가 아직 확인되지 않았습니다. 제공 화면의 「원천 결과만 재조회」로 서버 결과를 다시 조회하세요.'],
   succeeded: ['효과 확인(succeeded)', '연동 시스템이 조치 효과를 관측했습니다.'],
   denied: ['거절(denied)', '연동 시스템이 조치를 거절했습니다. 효과가 적용되었다고 읽지 마세요.'],
   failed: ['실패(failed)', '연동 시스템에서 조치가 실패했습니다. 효과가 적용되었다고 읽지 마세요.'],
-  unknown: ['결과 불명(unknown)', '효과가 적용되었는지 알 수 없습니다. 성공으로도 효과 없음으로도 판단하지 말고 제공 화면의 「연동 시스템 결과만 재조회」로 결과만 다시 조회하세요.'],
+  unknown: ['결과 불명(unknown)', '효과가 적용되었는지 알 수 없습니다. 성공으로도 효과 없음으로도 판단하지 말고 제공 화면의 「원천 결과만 재조회」로 결과만 다시 조회하세요.'],
   expired: ['확인 기한 지남(expired)', '사람 확인 기한이 지나 조치는 실행되지 않았습니다. 조치를 다시 준비해야 합니다.'],
   error: ['요청 처리 안 됨(error)', '요청이 처리되지 않았습니다. 효과 적용 여부를 이 표시로 판단하지 마세요.'],
 };
@@ -889,14 +889,14 @@ function renderActionView(input) {
   // 알 수 없는 status는 성공으로 추측하지 않는다.
   if (!status) {
     root.append(make('p', `주의 · 결과 불명(unknown): 알 수 없는 조치 상태(${shortText(data.status, 40) || '없음'})입니다.`, 'state state-error'));
-    root.append(make('p', '성공이나 효과 없음으로 판단하지 말고 제공 화면의 「연동 시스템 결과만 재조회」로 결과만 다시 조회하세요.'));
+    root.append(make('p', '성공이나 효과 없음으로 판단하지 말고 제공 화면의 「원천 결과만 재조회」로 결과만 다시 조회하세요.'));
     return root;
   }
   const check = checkAction(data);
   if (!check.ok) {
     root.append(make('p', '주의 · 결과 불명(unknown): 현재 사건·조치·요청과 맞지 않는 표시입니다.', 'state state-error'));
     root.append(make('p', `까닭: ${check.reason}`, 'state state-error'));
-    root.append(make('p', '성공이나 효과 없음으로 판단하지 마세요. 제공 화면의 「연동 시스템 결과만 재조회」로 결과만 다시 조회하세요.'));
+    root.append(make('p', '성공이나 효과 없음으로 판단하지 마세요. 제공 화면의 「원천 결과만 재조회」로 결과만 다시 조회하세요.'));
     return root;
   }
   const shown = check.downgrade ? 'unknown' : status;

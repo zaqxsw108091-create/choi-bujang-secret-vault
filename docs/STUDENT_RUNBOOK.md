@@ -3,7 +3,7 @@
 이 문서는 학생이 새로 작성했습니다. 제공 문서(`on-client/README.md`, `on-client/docs/*`)는 고치지 않았습니다. 이 문서가 제공 문서와 다르면 실제 코드와 대조한 이 문서의 "확인 기록"을 먼저 봅니다.
 
 - 작성일: 2026-11-01
-- 대상 앱: 케셰브(보안 Agent 앱). 실행 폴더는 `on-client`입니다. 앱 버전은 `on-client/package.json`의 `0.2.14`입니다.
+- 대상 앱: 케셰브(보안 Agent 앱). 실행 폴더는 `on-client`입니다. 앱 버전은 `on-client/package.json`의 `version`입니다. 이 문서의 코드 읽기와 서버 실행은 커밋 `91086ba`의 `0.2.14` 기준이고, 내 PC 작업 폴더는 시작 틀 `0.2.21`로 갱신된 상태입니다(`git diff package.json`으로 확인, 아직 커밋하지 않은 변경). 두 버전의 차이는 6장에 적었습니다.
 - 목적: 로그인한 직원이 자기 로그인 상태, 업무 앱 접속 판정, 최근 접속·보안 기록, AI 설명, 설치 패키지의 알려진 취약점을 한 화면에서 보는 앱입니다. 본인 범위만 보여 주며 회사 전체 관리자 화면이 아닙니다.
 - 이 문서의 표기: **실제 확인**은 아래 6장 "확인 기록"에 적은 실행을 한 것입니다. **코드로만 읽음**은 코드를 읽었으나 실행하지 않은 것입니다. **미확인**은 읽지도 실행하지도 않은 것입니다. 표기가 없는 문장은 코드나 파일 이름만 설명합니다.
 
@@ -134,11 +134,11 @@ flowchart LR
 
 ### 5-1. 제공 코드와 학생 구현의 경계
 
-`on-client/.on-starter-manifest.json`에는 제공 파일 56개의 SHA-256 해시가 있습니다. 이 56개와 현재 파일을 대조했더니(6장) 달라진 파일은 `student/extension.mjs` 하나뿐입니다. 즉 학생이 고친 제공 파일은 이것 하나입니다. 이 문서(`docs/STUDENT_RUNBOOK.md`)는 manifest 밖의 새 파일입니다.
+`on-client/.on-starter-manifest.json`에는 제공 파일의 SHA-256 해시가 있습니다. 커밋 `91086ba`(`0.2.14`)에서 56개를 현재 파일과 대조했더니(6장) 달라진 파일은 `student/extension.mjs` 하나뿐이었습니다. 즉 그 시점에 학생이 고친 제공 파일은 이것 하나입니다. 내 PC의 `0.2.21` 갱신은 시작 틀 업데이트이며 학생이 직접 고친 것이 아니고, 갱신 뒤의 해시 대조는 **하지 않았습니다(미확인)**. 이 문서(`docs/STUDENT_RUNBOOK.md`)는 manifest 밖의 새 파일입니다.
 
 | 구분 | 파일 | 학생이 고쳤나 |
 |---|---|---|
-| 제공(수정 안 함) | `on-client/public/*`, `on-client/src/**`, `on-client/tools/*`, `on-client/vendor/*`, `on-client/student/engine-adapter.mjs`, `on-client/docs/*`, `on-client/package.json` | 아니요(manifest 해시와 같음) |
+| 제공(수정 안 함) | `on-client/public/*`, `on-client/src/**`, `on-client/tools/*`, `on-client/vendor/*`, `on-client/student/engine-adapter.mjs`, `on-client/docs/*`, `on-client/package.json` | 아니요(`0.2.14` 시점 manifest 해시와 같음. `0.2.21` 갱신 뒤는 미확인) |
 | 학생 구현 | `on-client/student/extension.mjs` | 예 |
 | 학생 문서 | `docs/STUDENT_RUNBOOK.md`, `README.md`의 21단계 절 | 예 |
 
@@ -196,7 +196,7 @@ flowchart LR
 | 예제 실행: `POST /api/access`, `POST /api/ai/check`를 명령줄에서 전송 | `ORIGIN_REJECTED`로 거절(앱 화면이 아닌 요청) |
 | `ON_PORT=5190 node src/server.mjs` (기본 실행) | `케셰브 연결 확인: http://127.0.0.1:5190` 출력. `GET /api/me`·`/api/apps`·`/api/events`는 `ENGINE_NOT_CONNECTED` |
 | Chromium으로 두 화면을 열어 읽음 | 탭 이름 `보호 현황`·`업무 앱`·`보안 기록`. 위쪽 표시는 예제에서 `예제 데이터(demo) · 실제 연결 아님`, 기본 실행에서 `연결 없음`. 기본 실행의 학생 칸에 `연결 실패: 기존 서버·에이전트의 연결을 확인할 수 없습니다…`. 「설치 패키지 조회」를 누르면 `조회 준비 미완료(not_configured)`. 「AI 연결 점검」을 누르면 `주의 · AI 연결 점검 실패(error)`와 `권한 준비 중·확인 불가` |
-| manifest 56개 파일의 SHA-256을 현재 파일과 대조 | 다른 파일은 `student/extension.mjs` 하나 |
+| `0.2.14`(커밋 `91086ba`)에서 manifest 56개 파일의 SHA-256을 현재 파일과 대조 | 다른 파일은 `student/extension.mjs` 하나 |
 
 확인 뒤 서버는 모두 종료했습니다.
 
@@ -215,5 +215,16 @@ flowchart LR
 | 조치 실행(`renderAction`의 집행) | 기다림(UNV) | 사용하지 않음. 서버 처리 결과를 보지 못함 |
 | OSV 실제 조회 결과(알려진 항목 있음·없음) | 기다림(UNV) | 허용 목록이 비어 `not_configured`만 확인함 |
 | 새 폴더에서의 처음부터 재설치(22단계) | 범위 밖 | 21단계에서 하지 않음 |
+
+### 6-3. 시작 틀 0.2.14와 0.2.21의 차이 (내 PC 화면에서 확인한 것만)
+
+내 Windows PC에서 PowerShell로 직접 확인한 값입니다(2026-11-01).
+
+| 확인 | 결과 |
+|---|---|
+| `git diff package.json` | `version`이 `0.2.14`에서 `0.2.21`로 바뀜. `scripts`에 `"package-app": "node tools/package-app.mjs"`가 추가됨. `start`, `demo`, `check` 명령은 그대로. `engines.node`는 `24.19.0` 그대로 |
+| `tools/start-alekov.ps1`에서 찾은 줄 | 기본 포트 `5189`, 기다리는 시간 기본 `20`초(1~120), Node.js 22~24 확인과 24.19.0 권장 안내, 켜짐 신호 `케셰브가 켜졌습니다. 브라우저에서 $url 을 여세요.`와 `서버가 응답한 것만 확인했습니다. AI 연결 상태는 화면에서 따로 확인해 주세요.`. 3장에 쓴 내용과 같음 |
+
+`0.2.21`에 새로 생긴 `examples/`, `tools/package-app.mjs`, `tools/install-packaged-app.ps1`, `src/pc-status.mjs`, `public/pc-status-view.mjs`와 바뀐 `public/app.js`, `src/server.mjs` 등은 **읽지도 실행하지도 않았습니다(미확인)**. 그래서 이 문서의 구성도·함수 표·화면 문구는 `0.2.14` 코드 기준이며, `0.2.21`에서 다른 점이 있는지는 확인하지 않았습니다. `npm run package-app`은 사용하지 않았고 설명하지 않습니다.
 
 이 문서의 어떤 문장도 서버 판정이나 통과를 뜻하지 않습니다. 서버는 이 문서의 명령을 실행하지 않고, 제출한 커밋의 글과 코드를 읽어 설명이 맞는지 판정합니다.

@@ -723,10 +723,10 @@ PR #62도 병합 커밋으로 합쳐져 `origin/main`이 `f55b9a7`(부모 둘: `
 
 ## 21단계: 다른 사람이 이해할 수 있는 문서 (2026-11-01)
 
-13~20단계에서 만든 케셰브 앱(`on-client`)의 실행 설명서와 구성도를 [docs/STUDENT_RUNBOOK.md](docs/STUDENT_RUNBOOK.md)에 새로 썼습니다. 제공 문서와 제공 코드(`on-client`의 `student/extension.mjs` 말고 나머지 55개 제공 파일)는 고치지 않았습니다.
+13~20단계에서 만든 케셰브 앱(`on-client`)의 실행 설명서와 구성도를 [docs/STUDENT_RUNBOOK.md](docs/STUDENT_RUNBOOK.md)에 새로 썼습니다. 제공 문서와 제공 코드는 고치지 않았습니다(`0.2.14` 시점에 제공 파일 56개 중 `student/extension.mjs`만 달랐습니다). 내 PC의 시작 틀 `0.2.21` 갱신은 따로 있으며 이 문서는 그 내용을 확인하지 않았습니다.
 
 - **목적·기능**: 로그인한 직원이 본인 로그인 상태, 업무 앱 접속 판정, 최근 접속·보안 기록, AI 설명, 설치 패키지의 알려진 취약점을 한 화면에서 봅니다. 학생 구현은 `on-client/student/extension.mjs`의 `renderIdentity`, `renderDecision`, `renderEvents`, `renderStatus`, `renderAiConnection`, `renderExplanation`, `renderAction`, `renderVulnerabilities`입니다.
 - **구성**: 브라우저(`http://127.0.0.1:5189/`) → 로컬 앱 서버(`on-client/src/server.mjs`) → 기존 접속·XDR 서버 어댑터(`on-client/student/engine-adapter.mjs`) / AI 게이트웨이 CLCO / OSV. 글로 쓴 구성도(Mermaid·ASCII·표)는 설명서 4장에 있습니다.
-- **지원 환경·버전**: 앱 버전 `0.2.14`, Node.js 22~24(수업 기준 24.19.0), 외부 npm 의존성 없음. 설명서 확인은 수업용 AI 작업 환경(Linux, Node.js v22.23.4)에서만 했습니다. 내 Windows PC와 PowerShell 실행 도구(`start-alekov.ps1`)는 **미확인**입니다.
+- **지원 환경·버전**: 앱 버전 `0.2.14` 기준(내 PC 작업 폴더는 `0.2.21`로 갱신됨, 차이는 설명서 6-3), Node.js 22~24(수업 기준 24.19.0), 외부 npm 의존성 없음. 설명서 확인은 수업용 AI 작업 환경(Linux, Node.js v22.23.4)에서만 했습니다. 내 Windows PC와 PowerShell 실행 도구(`start-alekov.ps1`)는 **미확인**입니다.
 - **실행**: `on-client` 폴더의 PowerShell에서 `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1`. 대체로 `npm start`, 예제는 `npm run demo`, 문법 확인은 `npm run check`(화면·연결 확인 아님).
 - **확인하지 않은 것**: 계정 연결·AI 앱 승인·AI 점검 성공, 실제 기존 서버(SDP) 연결, 조치 실행, OSV 실제 조회 결과는 확인하지 않았습니다(설명서 6장의 기다림 목록).

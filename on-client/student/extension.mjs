@@ -314,7 +314,8 @@ function renderEventsView({ status, mode, data, error } = {}) {
         button.addEventListener('click', () => {
           selectedId = event.id;
           detailSlot.replaceChildren(eventDetail(event));
-          draw();
+          // 목록을 다시 그리지 않고 표시만 바꿔 키보드 포커스를 유지한다.
+          for (const other of list.querySelectorAll('button')) other.setAttribute('aria-expanded', String(other === button));
         });
         row.append(button);
         list.append(row);

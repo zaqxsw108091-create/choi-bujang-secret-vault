@@ -720,3 +720,13 @@ PR #62도 병합 커밋으로 합쳐져 `origin/main`이 `f55b9a7`(부모 둘: `
 - **그 점검들의 실제 결과는 README에 있습니다**: 학생이 자기 컴퓨터에서 실행한 `npm run attack:live`(2026-10-15, 제출 묶음 커밋 `fa36e6a`)에서 `public_data_json_no_notes` 404, `static_marker_absent` 확인 표시 없음(`/data.json` 404, `/aleph.json` 200), `anonymous_notes_list_refused` 401이었고, `npm run matrix`(2026-10-16)에서도 `/data.json` 404, 로그인 없는 목록 401이 `통과`였습니다. 쓰기·변형 요청의 실측은 위 절들에 있습니다.
 - **다시 확인하는 방법**: 학생 컴퓨터에서 `npm.cmd run attack:live`(두 계정 입력 뒤 기기 승인)를 실행하거나 `ATTACK_LIVE=1`을 넣고 `npm run bundle`을 실행하면 그 시점의 실제 응답이 제출 묶음에 적힙니다.
 - **확인한 것**: 시험 236건 통과(평소 bundle은 요청 0건·20개 모두 `not_run`, `ATTACK_LIVE=1`이면 실제 요청을 보냄), `npm run check:secrets` 통과. 이것이 원인의 전부인지는 다시 제출한 결과로만 확인됩니다(추측).
+
+## 21단계: 다른 사람이 이해할 수 있는 문서 (2026-11-01)
+
+13~20단계에서 만든 케셰브 앱(`on-client`)의 실행 설명서와 구성도를 [docs/STUDENT_RUNBOOK.md](docs/STUDENT_RUNBOOK.md)에 새로 썼습니다. 제공 문서와 제공 코드(`on-client`의 `student/extension.mjs` 말고 나머지 55개 제공 파일)는 고치지 않았습니다.
+
+- **목적·기능**: 로그인한 직원이 본인 로그인 상태, 업무 앱 접속 판정, 최근 접속·보안 기록, AI 설명, 설치 패키지의 알려진 취약점을 한 화면에서 봅니다. 학생 구현은 `on-client/student/extension.mjs`의 `renderIdentity`, `renderDecision`, `renderEvents`, `renderStatus`, `renderAiConnection`, `renderExplanation`, `renderAction`, `renderVulnerabilities`입니다.
+- **구성**: 브라우저(`http://127.0.0.1:5189/`) → 로컬 앱 서버(`on-client/src/server.mjs`) → 기존 접속·XDR 서버 어댑터(`on-client/student/engine-adapter.mjs`) / AI 게이트웨이 CLCO / OSV. 글로 쓴 구성도(Mermaid·ASCII·표)는 설명서 4장에 있습니다.
+- **지원 환경·버전**: 앱 버전 `0.2.14`, Node.js 22~24(수업 기준 24.19.0), 외부 npm 의존성 없음. 설명서 확인은 수업용 AI 작업 환경(Linux, Node.js v22.23.4)에서만 했습니다. 내 Windows PC와 PowerShell 실행 도구(`start-alekov.ps1`)는 **미확인**입니다.
+- **실행**: `on-client` 폴더의 PowerShell에서 `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1`. 대체로 `npm start`, 예제는 `npm run demo`, 문법 확인은 `npm run check`(화면·연결 확인 아님).
+- **확인하지 않은 것**: 계정 연결·AI 앱 승인·AI 점검 성공, 실제 기존 서버(SDP) 연결, 조치 실행, OSV 실제 조회 결과는 확인하지 않았습니다(설명서 6장의 기다림 목록).

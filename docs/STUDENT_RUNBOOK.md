@@ -14,7 +14,7 @@
 | Node.js | 22~24 (수업 기준 24.19.0) | 수업용 AI 작업 환경(Linux): v22.23.4. 내 Windows PC: **v24.15.0** (실행 도구가 `참고: 지금 Node.js 는 v24.15.0 입니다. 수업 기준은 v24.19.0 입니다.`라고 알림. 22~24 범위라 실행은 막히지 않음) | 요구 버전은 `on-client/package.json`의 `engines`와 `on-client/tools/start-alekov.ps1`에서 읽음. 내 PC 값은 PowerShell에서 `node --version`으로 확인해 이 칸에 적습니다 |
 | npm | Node.js에 포함 | 수업용 AI 작업 환경: 10.9.9 | `npm --version` |
 | Windows PowerShell | 실행 도구(`start-alekov.ps1`)용 | 내 Windows PC의 Windows PowerShell에서 실행 도구가 켜짐(6-3). 버전 번호는 확인하지 않음 | |
-| 브라우저 | 주소 `http://127.0.0.1:5189/`를 열 수 있는 것 | 수업용 AI 작업 환경의 Chromium(자동 조작)으로 화면을 열어 봄. 내 Windows PC: Microsoft Edge로 열림(2026-11-01, 새 폴더 `0.2.14`와 원래 폴더 `0.2.21` 모두) | |
+| 브라우저 | 주소 `http://127.0.0.1:5189/`를 열 수 있는 것 | 수업용 AI 작업 환경의 Chromium(자동 조작)으로 화면을 열어 봄. 내 Windows PC: Microsoft Edge로 새 폴더(`0.2.14`) 화면이 열림(2026-11-01). 원래 폴더 `0.2.21` 화면의 브라우저 종류는 이 문서에 기록하지 않음 | |
 
 외부 npm 의존성은 없습니다(`on-client/package.json`에 `dependencies`가 없음). 그래서 `npm install`이 필요 없습니다.
 

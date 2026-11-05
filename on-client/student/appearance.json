@@ -1,0 +1,10 @@
+{
+  "schema": "alekov.student-appearance.v1",
+  "appName": "내 PC 관제 · 케셰브",
+  "palette": {
+    "accent": "#6b3fb3",
+    "background": "#f6f2fb",
+    "surface": "#ffffff"
+  },
+  "dashboardPreset": "student-first"
+}

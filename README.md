@@ -723,6 +723,8 @@ PR #62도 병합 커밋으로 합쳐져 `origin/main`이 `f55b9a7`(부모 둘: `
 
 ## 마지막 총공세: 내 PC 관제 대시보드
 
+> **마지막 총공세의 정식 완성본은 [`final-assault` 브랜치](https://github.com/zaqxsw108091-create/choi-bujang-secret-vault/tree/final-assault)입니다.** 22단계 케셰브 앱(`on-client`) 위에서 `on-client/student/extension.mjs`로 이어 만들었고, 정리 문서는 그 브랜치의 `docs/FINAL_ASSAULT.md`입니다. 아래에 설명하는 `student/` 폴더의 앱은 먼저 만든 **독립 실행 버전의 사본**(포트폴리오용)이며, 22단계 앱과는 별개입니다.
+
 `student/` 폴더에 내 PC 상태를 읽어서 보여 주는 앱을 추가했습니다. 핵심 기능은 **기록 보기 · 내 PC 상태 · 위험 알림** 3가지입니다. 상태 카드 4개(CPU·메모리·디스크·방화벽), 보안 점검 4개, 연결과 기록(네트워크·Windows 경고·오류·SDP 서버), 정상/주의/확인 불가 판정, 조회 기록과 그래프, 예제 모드를 담았습니다. 읽기 전용이며, 포장 없이 `node student/server.mjs`(예제는 `--demo`)로 실행합니다. 기존 1~12단계 코드, `aleph.config.json`, 판정기·탐지 규칙은 바꾸지 않았습니다.
 
 기능 점검표, 실행 안내, 시연 순서, 한계, 확인하지 못한 것은 [`student/README.md`](student/README.md)에 적었습니다. 같은 앱의 포트폴리오용 저장소: https://github.com/zaqxsw108091-create/pc-control-dashboard

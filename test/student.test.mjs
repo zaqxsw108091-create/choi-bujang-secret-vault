@@ -274,3 +274,14 @@ test('서버: --no-save 모드는 파일을 만들지 않고 meta에 memory로 �
     await new Promise((r) => app.server.close(r));
   }
 });
+
+test('check-once: 한 번 조회해서 8개 항목을 글자로 보여 준다 (기록 파일을 만들지 않음)', async () => {
+  const { execFile } = await import('node:child_process');
+  const run = (args) => new Promise((resolve, reject) =>
+    execFile(process.execPath, ['student/check-once.mjs', ...args], { timeout: 30000 }, (e, out) => (e ? reject(e) : resolve(out))));
+  const text = await run([]);
+  assert.match(text, /점검 8개 중 \d개 정상/);
+  assert.equal((text.match(/^- \[/gm) || []).length, 8);
+  const json = JSON.parse(await run(['--json']));
+  assert.equal(json.items.length, 8);
+});

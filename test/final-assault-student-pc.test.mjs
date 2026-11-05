@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
-  PC_GRADED, PC_LIMITS, compareReadings, computeAlerts, createStudentView, judgePcStatus, sanitizeHistory, summarizePc,
+  PC_GRADED, PC_LIMITS, buildCsv, compareReadings, computeAlerts, createStudentView, groupHistory, judgePcStatus, sanitizeHistory, summarizePc,
 } from '../on-client/student/extension.mjs';
 import { parseStudentAppearance, appearanceView } from '../on-client/src/student-appearance.mjs';
 
@@ -200,4 +200,40 @@ test('꾸밈 파일: 제공 검증기를 보정 없이 통과한다', () => {
   assert.equal(view.appName, '내 PC 관제 · 케셰브');
   assert.equal(view.dashboardPreset, 'student-first');
   assert.deepEqual(view.corrected, [], '색이 자동으로 바뀌지 않음');
+});
+
+test('기록 묶기: 조회 한 번씩 묶고 최근 조회가 먼저, 거르면 맞는 항목만', () => {
+  const entries = [
+    entry('t1', { cpu: ['ok', 10], memory: ['ok', 10], firewall: ['unknown'] }),
+    entry('t2', { cpu: ['warn', 90], memory: ['ok', 10], network: ['info'] }),
+    entry('t3', { cpu: ['ok', 12], memory: ['ok', 11] }),
+  ];
+  const all = groupHistory(entries, 'all');
+  assert.deepEqual(all.map((g) => g.at), ['t3', 't2', 't1']);
+  assert.deepEqual(all[1].counts, { ok: 1, warn: 1, unknown: 0, info: 1 });
+  assert.equal(all[1].items.length, 3);
+  const warn = groupHistory(entries, 'warn');
+  assert.deepEqual(warn.map((g) => g.at), ['t2'], '주의가 없는 조회는 건너뜀');
+  assert.equal(warn[0].items.length, 1);
+  assert.deepEqual(groupHistory(entries, 'unknown').map((g) => g.at), ['t1']);
+  assert.equal(groupHistory(entries, 'all', 2).length, 2, '개수 제한');
+  assert.deepEqual(groupHistory([], 'all'), []);
+});
+
+test('CSV: 머리줄·BOM·따옴표·수식 막기, 숫자와 상태만', () => {
+  const csv = buildCsv([
+    { at: '2026-11-05T01:02:03.000Z', items: [
+      { id: 'cpu', label: 'CPU', status: 'ok', text: '사용률 12%', value: 12, reason: '' },
+      { id: 'firewall', label: '방화벽', status: 'unknown', text: '확인 불가 · 권한 없음', value: null, reason: '=HYPERLINK("http://x")' },
+      { id: 'events', label: 'Windows 경고·오류', status: 'info', text: '따옴표 " 포함', value: 58, reason: '' },
+    ] },
+  ]);
+  assert.equal(csv.charCodeAt(0), 0xFEFF, '엑셀에서 한글이 깨지지 않게 BOM');
+  const lines = csv.slice(1).split('\r\n');
+  assert.equal(lines[0], '"시각","항목","상태","내용","값","이유"');
+  assert.equal(lines.length, 4);
+  assert.equal(lines[1], '"2026-11-05T01:02:03.000Z","CPU","정상","사용률 12%","12",""');
+  assert.match(lines[2], /"'=HYPERLINK\(""http:\/\/x""\)"$/, '수식으로 읽히지 않게 앞에 작은따옴표');
+  assert.match(lines[3], /"참고","따옴표 "" 포함","58"/);
+  assert.equal(buildCsv([]).slice(1), '"시각","항목","상태","내용","값","이유"');
 });

@@ -1282,6 +1282,33 @@ export function compareReadings(previous, current) {
   });
 }
 
+// 기록을 조회 한 번씩 묶는다(최근 조회가 먼저). 거르기 조건에 맞는 항목이 없는 조회는 건너뛴다.
+export function groupHistory(entries, filter = 'all', limit = 30) {
+  const groups = [];
+  for (const entry of [...entries].reverse()) {
+    const counts = { ok: 0, warn: 0, unknown: 0, info: 0 };
+    for (const item of entry.items) if (Object.hasOwn(counts, item.status)) counts[item.status] += 1;
+    const items = entry.items.filter((item) => filter === 'all' || item.status === filter);
+    if (items.length > 0) groups.push({ at: entry.at, counts, items });
+    if (groups.length >= limit) break;
+  }
+  return groups;
+}
+
+// CSV로 내보낼 글. 숫자·상태·시각·이유만 넣고, 엑셀에서 한글이 깨지지 않게 맨 앞에 BOM을 둔다.
+export function buildCsv(entries) {
+  const cell = (value) => {
+    let text = value === null || value === undefined ? '' : String(value);
+    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`; // 엑셀에서 수식으로 읽히지 않게
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+  const rows = [['시각', '항목', '상태', '내용', '값', '이유']];
+  for (const entry of entries) {
+    for (const item of entry.items) rows.push([entry.at, item.label, PC_STATUS_LABELS[item.status] ?? '', item.text, item.value, item.reason]);
+  }
+  return `\uFEFF${rows.map((row) => row.map(cell).join(',')).join('\r\n')}`;
+}
+
 // 저장된 기록을 믿지 않고 모양을 다시 검사한다. 맞지 않는 줄은 버린다.
 export function sanitizeHistory(raw) {
   if (!Array.isArray(raw)) return [];
@@ -1395,7 +1422,11 @@ function pcSection(className, title) {
   section.style.setProperty('margin-top', '16px');
   section.style.setProperty('padding-top', '12px');
   section.style.setProperty('border-top', '1px solid var(--border)');
-  section.append(make('h4', title));
+  const heading = make('h4', title);
+  heading.style.setProperty('font-size', '1.1rem');
+  heading.style.setProperty('color', 'var(--text)');
+  heading.style.setProperty('margin', '0 0 8px');
+  section.append(heading);
   return section;
 }
 
@@ -1410,7 +1441,7 @@ function pcRow(item, extra) {
 // 화면 상태(기록·선택·진행 중)를 한곳에 두고, 바뀔 때마다 제공 화면의 onChange로 다시 그린다.
 function createPcInsights({ api, onChange } = {}) {
   const loaded = loadPcHistory();
-  const state = { entries: loaded.entries, persisted: loaded.persisted, busy: false, latest: null, failure: null, metric: 'cpu', filter: 'all', notice: '', restore: null };
+  const state = { entries: loaded.entries, persisted: loaded.persisted, busy: false, latest: null, failure: null, metric: 'cpu', filter: 'all', notice: '', restore: null, openAts: new Map() };
   const changed = () => { if (typeof onChange === 'function') onChange(); };
 
   async function refresh() {
@@ -1444,7 +1475,7 @@ function createPcInsights({ api, onChange } = {}) {
     const heading = make('h3', '내 PC 기록·추이·위험 알림 ');
     heading.append(make('span', '학생 구현', 'tag tag-student'));
     root.append(heading);
-    root.append(make('p', '값은 제공된 「내 PC 상태」가 이 PC에서 실제로 잰 결과입니다. 이 칸은 그 값으로 기록 남기기·이전 조회와 비교·위험 알림만 만들며, 예시 값은 쓰지 않습니다. 읽지 못한 값은 「확인 불가」와 이유로 보여 줍니다.', 'muted'));
+    root.append(make('p', '값은 제공된 「내 PC 상태」(이 화면 아래쪽 칸)와 같은 조회 결과이며 이 PC에서 실제로 잰 값입니다. 이 칸은 그 값으로 기록 남기기·이전 조회와 비교·위험 알림만 만듭니다. 아래 제공 칸의 「내 PC 확인」과 이 칸의 「다시 조회」는 따로 조회합니다. 예시 값은 쓰지 않고, 읽지 못한 값은 「확인 불가」와 이유로 보여 줍니다.', 'muted'));
 
     const bar = make('p', null, 'pc-insights-bar');
     const refresh_ = make('button', state.busy ? '읽는 중…' : '다시 조회', 'btn');
@@ -1469,6 +1500,23 @@ function createPcInsights({ api, onChange } = {}) {
       root.append(make('p', '다음에 할 일: 앱이 실행 중인지 확인하고 「다시 조회」를 눌러 주세요. 계속 안 되면 제공 화면의 「도움정보」를 복사해 담당자에게 전달하세요.', 'muted'));
     }
 
+    // 핵심 기능 3가지를 맨 위에 한눈에 보인다. 아래 각 칸에서 자세히 본다.
+    const alerts = computeAlerts(state.entries);
+    const lastEntry = state.entries[state.entries.length - 1];
+    const strip = make('div', null, 'pc-core3');
+    strip.style.setProperty('display', 'grid');
+    strip.style.setProperty('grid-template-columns', 'repeat(auto-fit, minmax(230px, 1fr))');
+    strip.style.setProperty('gap', '8px');
+    strip.style.setProperty('margin-top', '12px');
+    const summary0 = state.latest ? summarizePc(state.latest.items) : null;
+    const core1 = make('p', summary0
+      ? `① 내 PC 상태 · ${summary0.text}${summary0.warn ? ` · 주의 ${summary0.warn}` : ''}${summary0.unknown ? ` · 확인 불가 ${summary0.unknown}` : ''} (${pcTime(state.latest.entry.at)})`
+      : '① 내 PC 상태 · 아직 이 화면에서 조회하지 않음', summary0 ? (summary0.warn ? 'state state-error' : summary0.unknown ? 'state state-empty' : 'state state-ok') : 'state state-empty');
+    const core2 = make('p', `② 기록 보기 · 조회 ${state.entries.length}번${lastEntry ? ` · 마지막 ${pcTime(lastEntry.at)}` : ''}`, state.entries.length ? 'state state-ok' : 'state state-empty');
+    const core3 = make('p', lastEntry ? `③ 위험 알림 · ${pcTime(alerts.checkedAt)} 조회 기준 주의 ${alerts.current.length}개` : '③ 위험 알림 · 조회 기록이 아직 없음', alerts.current.length ? 'state state-error' : lastEntry ? 'state state-ok' : 'state state-empty');
+    [core1, core2, core3].forEach((node, index) => { node.dataset.pcCore = String(index + 1); strip.append(node); });
+    root.append(strip);
+
     // 현재 값(이번 조회) + 읽지 못한 항목 안내
     if (state.latest) {
       const summary = summarizePc(state.latest.items);
@@ -1488,11 +1536,11 @@ function createPcInsights({ api, onChange } = {}) {
       root.append(block);
     }
 
-    // 위험 알림
-    const alerts = computeAlerts(state.entries);
-    const alertBlock = pcSection('pc-alerts', `위험 알림 · 지금 주의 ${alerts.current.length}개`);
+    // 위험 알림: 마지막으로 저장된 조회 기준임을 시각과 함께 밝힌다.
+    const alertBlock = pcSection('pc-alerts', alerts.checkedAt ? `위험 알림 · ${pcTime(alerts.checkedAt)} 조회 기준 주의 ${alerts.current.length}개` : '위험 알림 · 아직 조회 기록 없음');
     alertBlock.dataset.alerts = String(alerts.current.length);
     alertBlock.append(make('p', '기준값을 넘었다는 알림이며 침해(공격) 판정이 아닙니다. 방화벽이 켜져 있거나 경고·오류가 적어도 안전하다는 뜻이 아닙니다.', 'muted'));
+    if (!state.latest && state.entries.length > 0) alertBlock.append(make('p', '지금 값이 아니라 마지막으로 저장된 기록 기준입니다. 「다시 조회」로 새로 확인하세요.', 'state state-empty'));
     if (state.entries.length === 0) alertBlock.append(make('p', '아직 조회 기록이 없어 알릴 것이 없습니다.', 'state state-empty'));
     else if (alerts.current.length === 0) alertBlock.append(make('p', '지금 기록 기준으로 주의 항목이 없습니다. (읽지 못한 항목은 위 「읽지 못한 항목」에서 따로 보세요.)', 'state state-ok'));
     else {
@@ -1537,6 +1585,8 @@ function createPcInsights({ api, onChange } = {}) {
       tabs.append(b, document.createTextNode(' '));
     }
     chartBlock.append(tabs, pcChart(state.entries, CHART_METRICS.find((m) => m.id === state.metric)));
+    // 좁은 화면에서는 그래프가 가로로 밀리므로 눈에 보이는 안내를 한 줄 덧붙인다.
+    if (typeof matchMedia === 'function' && matchMedia('(max-width: 600px)').matches && state.entries.length >= 2) chartBlock.append(make('p', '그래프는 좌우로 밀어서 볼 수 있습니다.', 'muted'));
     root.append(chartBlock);
 
     // 기록 보기
@@ -1553,21 +1603,45 @@ function createPcInsights({ api, onChange } = {}) {
       filters.append(b, document.createTextNode(' '));
     }
     logBlock.append(filters);
-    const rows = [];
-    for (const entry of [...state.entries].reverse()) {
-      for (const item of entry.items) if (state.filter === 'all' || item.status === state.filter) rows.push({ at: entry.at, item });
-      if (rows.length >= 60) break;
-    }
-    if (rows.length === 0) logBlock.append(make('p', state.entries.length === 0 ? '아직 기록이 없습니다.' : '이 조건에 맞는 기록이 없습니다.', 'state state-empty'));
-    else {
+    const groups = groupHistory(state.entries, state.filter);
+    if (groups.length === 0) logBlock.append(make('p', state.entries.length === 0 ? '아직 기록이 없습니다.' : '이 조건에 맞는 기록이 없습니다.', 'state state-empty'));
+    groups.forEach((group, index) => {
+      const details = make('details', null, 'pc-log-group');
+      details.style.setProperty('margin', '6px 0');
+      details.style.setProperty('border-bottom', '1px solid var(--border)');
+      details.open = state.openAts.has(group.at) ? state.openAts.get(group.at) : index === 0;
+      const head = make('summary', `${pcTime(group.at)} 조회 · 정상 ${group.counts.ok} · 주의 ${group.counts.warn} · 확인 불가 ${group.counts.unknown} · 참고 ${group.counts.info}`);
+      // 사용자가 직접 열고 닫은 것만 기억한다(맨 위 조회가 자동으로 열리는 것은 기억하지 않는다). 키보드 Enter·Space도 click으로 들어온다.
+      head.addEventListener('click', () => { setTimeout(() => { state.openAts.set(group.at, details.open); }, 0); });
+      head.style.setProperty('cursor', 'pointer');
+      head.style.setProperty('padding', '8px 0');
+      head.style.setProperty('font-weight', '600');
+      details.append(head);
       const ul = make('ul', null, 'plain-list pc-log-list');
-      for (const { at, item } of rows.slice(0, 60)) {
+      for (const item of group.items) {
         const li = make('li', null);
-        li.append(make('span', `${pcTime(at)} · ${PC_STATUS_ICONS[item.status]} ${PC_STATUS_LABELS[item.status]}`), make('span', `${item.label} · ${item.text}${item.status === 'unknown' && item.reason ? ` (${item.reason})` : ''}`));
+        li.append(make('span', `${PC_STATUS_ICONS[item.status]} ${PC_STATUS_LABELS[item.status]}`), make('span', `${item.label} · ${item.text}${item.status === 'unknown' && item.reason ? ` (${item.reason})` : ''}`));
         ul.append(li);
       }
-      logBlock.append(ul);
-    }
+      details.append(ul);
+      logBlock.append(details);
+    });
+    const csv = make('button', '기록 내보내기 (CSV)', 'btn');
+    csv.type = 'button';
+    csv.disabled = state.entries.length === 0;
+    csv.dataset.pcFocus = 'csv';
+    csv.addEventListener('click', () => {
+      const blob = new Blob([buildCsv(state.entries)], { type: 'text/csv;charset=utf-8' });
+      const link = document.createElement('a');
+      const now = new Date();
+      const two = (n) => String(n).padStart(2, '0');
+      link.href = URL.createObjectURL(blob);
+      link.download = `pc-status-history-${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}.csv`;
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      state.notice = `조회 ${state.entries.length}번 기록을 CSV로 내보냈습니다. 숫자·상태·시각·이유만 들어 있습니다.`; state.restore = 'csv'; changed();
+    });
+    logBlock.append(csv, document.createTextNode(' '));
     const clear = make('button', '기록 지우기', 'btn');
     clear.type = 'button';
     clear.disabled = state.entries.length === 0;

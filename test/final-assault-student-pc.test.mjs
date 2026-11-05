@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
-  PC_GRADED, PC_LIMITS, buildCsv, compareReadings, computeAlerts, createStudentView, groupHistory, judgePcStatus, sanitizeHistory, summarizePc,
+  PC_GRADED, PC_LIMITS, buildCsv, sdpLabel, compareReadings, computeAlerts, createStudentView, groupHistory, judgePcStatus, sanitizeHistory, summarizePc,
 } from '../on-client/student/extension.mjs';
 import { parseStudentAppearance, appearanceView } from '../on-client/src/student-appearance.mjs';
 
@@ -236,4 +236,14 @@ test('CSV: 머리줄·BOM·따옴표·수식 막기, 숫자와 상태만', () =>
   assert.match(lines[2], /"'=HYPERLINK\(""http:\/\/x""\)"$/, '수식으로 읽히지 않게 앞에 작은따옴표');
   assert.match(lines[3], /"참고","따옴표 "" 포함","58"/);
   assert.equal(buildCsv([]).slice(1), '"시각","항목","상태","내용","값","이유"');
+});
+
+test('SDP 연결 표시: 연결 없음·예제·확인 불가를 구분하고 연결됐다고 말하지 않는다', () => {
+  assert.equal(sdpLabel('demo'), 'SDP 미연결 · 예제 데이터(실제 연결 아님)');
+  assert.equal(sdpLabel('disconnected'), 'SDP 미연결 · 연결 없음');
+  assert.equal(sdpLabel('unknown'), 'SDP 연결 상태 확인 불가');
+  assert.equal(sdpLabel(undefined), 'SDP 연결 상태 확인 불가');
+  assert.equal(sdpLabel({ x: 1 }), 'SDP 연결 상태 확인 불가');
+  assert.doesNotMatch(sdpLabel('connected'), /연결됨|성공/, '제공 화면의 몫이므로 연결 성공을 단정하지 않음');
+  assert.match(sdpLabel('connected'), /제공 화면에서 확인/);
 });

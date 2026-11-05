@@ -535,7 +535,7 @@ function diagnosticsSection(diagnostics) {
 function renderStatusView({ devices, sessions, notifications, diagnostics, mode } = {}, pc) {
   const root = make('div', null, 'status-view');
   // 마지막 총공세: 내 PC 기록·추이·위험 알림(학생 구현)을 이 칸의 맨 위에 둔다. 아래 기존 표시는 그대로다.
-  if (pc) root.append(pc.render());
+  if (pc) root.append(pc.render(mode));
   root.append(statusSection('등록된 기기', '기기 목록', devices, '등록된 기기가 없음',
     (d) => `${nameWithId(d)} · ${d.status === 'compliant' ? '' : '주의 · '}${statusText(DEVICE_LABELS, d.status)}`,
     '내 이름으로 등록되고 회수되지 않은 기기를 최대 100개까지 보며, 운영체제처럼 서버가 모르는 값은 확인 불가입니다.'));
@@ -1430,12 +1430,44 @@ function pcSection(className, title) {
   return section;
 }
 
-function pcRow(item, extra) {
+// 보안 서버(SDP) 연결 상태는 PC 조회 결과와 섞지 않고 따로 보여 준다. 이 앱은 서버에 연결하지 않으므로 연결됐다고 말하지 않는다.
+export function sdpLabel(mode) {
+  if (mode === 'demo') return 'SDP 미연결 · 예제 데이터(실제 연결 아님)';
+  if (mode === 'disconnected') return 'SDP 미연결 · 연결 없음';
+  if (mode === 'connected') return 'SDP 연결 상태는 위쪽 제공 화면에서 확인하세요';
+  return 'SDP 연결 상태 확인 불가';
+}
+
+function pcRow(item, extra, at) {
   const row = make('p', `${PC_STATUS_ICONS[item.status]} ${PC_STATUS_LABELS[item.status]} · ${item.label}: ${item.text}`, PC_STATUS_CLASS[item.status]);
   row.dataset.pcItem = item.id;
   row.dataset.status = item.status;
   if (extra) row.append(make('span', ` — ${extra}`, 'muted'));
+  if (at) row.append(make('span', ` · ${pcTime(at)} 측정`, 'muted'));
   return row;
+}
+
+// 상태 카드: 값마다 항목 이름·값(단위 포함)·상태(정상/주의/확인 불가)·잰 시각을 함께 보인다. 색에만 의존하지 않고 기호와 글자를 함께 쓴다.
+function pcCard(item, at) {
+  const card = make('article', null, 'card pc-card');
+  card.dataset.pcItem = item.id;
+  card.dataset.status = item.status;
+  card.style.setProperty('margin', '0');
+  card.style.setProperty('padding', '12px 14px');
+  card.style.setProperty('border-left', `4px solid ${item.status === 'ok' ? 'var(--allow)' : item.status === 'warn' ? 'var(--deny)' : 'var(--unknown)'}`);
+  card.append(make('p', item.label, 'muted'));
+  const value = make('p', item.text);
+  value.style.setProperty('font-weight', '700');
+  value.style.setProperty('font-size', '1.05rem');
+  value.style.setProperty('margin', '2px 0 8px');
+  card.append(value);
+  card.append(make('p', `${PC_STATUS_ICONS[item.status]} ${PC_STATUS_LABELS[item.status]}`, PC_STATUS_CLASS[item.status]));
+  const note = item.status === 'unknown' ? item.reason : item.hint;
+  if (note) { const n = make('p', note, 'muted'); n.style.setProperty('margin', '6px 0 0'); card.append(n); }
+  const time = make('p', `${pcTime(at)} 측정`, 'muted');
+  time.style.setProperty('margin', '6px 0 0');
+  card.append(time);
+  return card;
 }
 
 // 화면 상태(기록·선택·진행 중)를 한곳에 두고, 바뀔 때마다 제공 화면의 onChange로 다시 그린다.
@@ -1469,7 +1501,7 @@ function createPcInsights({ api, onChange } = {}) {
     changed();
   }
 
-  function render() {
+  function render(mode) {
     const root = make('section', null, 'status-block pc-insights');
     root.dataset.pcInsights = 'true';
     const heading = make('h3', '내 PC 기록·추이·위험 알림 ');
@@ -1496,6 +1528,10 @@ function createPcInsights({ api, onChange } = {}) {
     } else if (state.latest) { live.className = 'state state-ok'; live.textContent = `이 PC에서 ${pcTime(state.latest.entry.at)}에 실제로 잰 값입니다. 보안 서버(SDP) 연결 상태와는 별개입니다.`; }
     else { live.className = 'state state-empty'; live.textContent = '아직 이 화면에서 조회하지 않았습니다. 「다시 조회」를 누르면 읽습니다.'; }
     root.append(live);
+    const sdp = make('p', `서버 연결(SDP) · ${sdpLabel(mode)} — PC 조회 결과와 별개이며, 섞어서 판단하지 않습니다.`, 'state state-empty');
+    sdp.dataset.pcSdp = 'true';
+    sdp.style.setProperty('margin-top', '8px');
+    root.append(sdp);
     if (state.failure && !state.busy) {
       root.append(make('p', '다음에 할 일: 앱이 실행 중인지 확인하고 「다시 조회」를 눌러 주세요. 계속 안 되면 제공 화면의 「도움정보」를 복사해 담당자에게 전달하세요.', 'muted'));
     }
@@ -1521,9 +1557,17 @@ function createPcInsights({ api, onChange } = {}) {
     if (state.latest) {
       const summary = summarizePc(state.latest.items);
       const block = pcSection('pc-current', `이번 조회 · ${summary.text}${summary.warn ? ` · 주의 ${summary.warn}개` : ''}${summary.unknown ? ` · 확인 불가 ${summary.unknown}개` : ''}`);
-      const list = make('div', null, 'pc-current-list');
-      for (const item of state.latest.items) list.append(pcRow(item, item.status === 'unknown' ? item.reason : state.latest.hints[item.id]));
-      block.append(list);
+      const at = state.latest.entry.at;
+      const cards = make('div', null, 'pc-cards');
+      cards.style.setProperty('display', 'grid');
+      cards.style.setProperty('grid-template-columns', 'repeat(auto-fit, minmax(210px, 1fr))');
+      cards.style.setProperty('gap', '10px');
+      for (const id of PC_GRADED) { const item = state.latest.items.find((i) => i.id === id); if (item) cards.append(pcCard(item, at)); }
+      block.append(cards);
+      const extras = make('div', null, 'pc-current-list');
+      extras.style.setProperty('margin-top', '10px');
+      for (const item of state.latest.items) if (!PC_GRADED.includes(item.id)) extras.append(pcRow(item, item.status === 'unknown' ? item.reason : state.latest.hints[item.id], at));
+      block.append(extras);
       const bad = state.latest.items.filter((i) => i.status === 'unknown');
       if (bad.length) {
         const box = make('div', null, 'state state-empty pc-unknown-box');

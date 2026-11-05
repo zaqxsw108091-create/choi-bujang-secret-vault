@@ -15,3 +15,7 @@ xdr/known-cve/block-rules.json
 xdr/persistence/block-rules.json
 xdr/privilege/block-rules.json
 xdr/exfiltration/block-rules.json
+
+# 마지막 총공세: 내 PC 관제 대시보드 (조회 기록은 내 PC에만 둠)
+student/data/
+student/node/

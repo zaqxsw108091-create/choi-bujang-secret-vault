@@ -720,3 +720,7 @@ PR #62도 병합 커밋으로 합쳐져 `origin/main`이 `f55b9a7`(부모 둘: `
 - **그 점검들의 실제 결과는 README에 있습니다**: 학생이 자기 컴퓨터에서 실행한 `npm run attack:live`(2026-10-15, 제출 묶음 커밋 `fa36e6a`)에서 `public_data_json_no_notes` 404, `static_marker_absent` 확인 표시 없음(`/data.json` 404, `/aleph.json` 200), `anonymous_notes_list_refused` 401이었고, `npm run matrix`(2026-10-16)에서도 `/data.json` 404, 로그인 없는 목록 401이 `통과`였습니다. 쓰기·변형 요청의 실측은 위 절들에 있습니다.
 - **다시 확인하는 방법**: 학생 컴퓨터에서 `npm.cmd run attack:live`(두 계정 입력 뒤 기기 승인)를 실행하거나 `ATTACK_LIVE=1`을 넣고 `npm run bundle`을 실행하면 그 시점의 실제 응답이 제출 묶음에 적힙니다.
 - **확인한 것**: 시험 236건 통과(평소 bundle은 요청 0건·20개 모두 `not_run`, `ATTACK_LIVE=1`이면 실제 요청을 보냄), `npm run check:secrets` 통과. 이것이 원인의 전부인지는 다시 제출한 결과로만 확인됩니다(추측).
+
+## 마지막 총공세: 내 PC 관제 대시보드
+
+`student/` 폴더에 내 PC 상태(CPU·메모리·디스크·방화벽과 Windows 보안 점검 4개)를 읽어서 보여 주는 앱을 추가했습니다. 읽기 전용이며, 포장 없이 `node student/server.mjs`(예제는 `--demo`)로 실행합니다. 기존 1~12단계 코드, `aleph.config.json`, 판정기·탐지 규칙은 바꾸지 않았습니다. 실행 방법·한계·확인하지 못한 것은 [`student/README.md`](student/README.md)에 적었습니다.

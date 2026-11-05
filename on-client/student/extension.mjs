@@ -1379,7 +1379,15 @@ function pcChart(entries, metric) {
   const last = node('text', { x: W - R, y: H - 6, 'text-anchor': 'end', 'font-size': 11 }, { fill: 'var(--muted)' });
   last.textContent = pcTime(points[points.length - 1].at);
   svg.append(first, last);
-  return svg;
+  // 좁은 화면에서 글자가 깨알처럼 작아지지 않게 그래프에만 가로 스크롤을 준다(키보드로도 스크롤 가능).
+  svg.style.setProperty('min-width', '520px');
+  const frame = make('div', null, 'pc-chart-frame');
+  frame.style.setProperty('overflow-x', 'auto');
+  frame.tabIndex = 0;
+  frame.setAttribute('role', 'group');
+  frame.setAttribute('aria-label', `${metric.name} 그래프 (좁은 화면에서는 좌우로 밀어서 볼 수 있습니다)`);
+  frame.append(svg);
+  return frame;
 }
 
 function pcSection(className, title) {
